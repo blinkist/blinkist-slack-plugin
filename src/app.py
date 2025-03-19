@@ -47,16 +47,17 @@ def handle_mood_command(ack, command, respond):
     command_handler.analyze_channel_mood(command['channel_id'], respond)
 
 def run_scheduler():
+    # Schedule question checks every minute
+    schedule.every(1).minutes.do(question_tracker.check_unanswered_questions)
+    
+    # Schedule weekly summary
+    schedule.every().friday.at("16:00").do(weekly_summary.generate_and_post_summary)
+    
     while True:
         schedule.run_pending()
         time.sleep(60)
 
 def main():
-    # Schedule weekly summary for Friday at 4 PM
-    schedule.every().friday.at("16:00").do(
-        weekly_summary.generate_and_post_summary
-    )
-    
     # Start the scheduler in a separate thread
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
