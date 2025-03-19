@@ -13,7 +13,11 @@ class CommandHandler:
     def tell_joke(self, respond):
         """Send a random data joke"""
         joke = random.choice(self.jokes)
-        respond(f"Here's a data joke for you:\n\n:smile: _{joke}_")
+        # Using response_type: 'in_channel' makes the message visible to everyone
+        respond(
+            text=f"Here's a data joke for you:\n\n:smile: _{joke}_",
+            response_type='in_channel'
+        )
 
     def analyze_channel_mood(self, channel_id, respond):
         """Analyze channel sentiment for the past week"""
@@ -53,7 +57,11 @@ class CommandHandler:
                 f"_Note: Scores range from -1 (negative) to +1 (positive)_"
             )
             
-            respond(response)
+            # Make the mood analysis visible to everyone too
+            respond(
+                text=response,
+                response_type='in_channel'
+            )
             
         except Exception as e:
             respond(f"Error analyzing channel mood: {str(e)}") 
