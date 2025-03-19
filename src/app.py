@@ -12,11 +12,24 @@ from handlers.command_handler import CommandHandler
 import schedule
 import time
 import threading
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Initialize the Slack app
+logger.info("Initializing Slack app")
 app = App(token=Settings.SLACK_BOT_TOKEN)
 
 # Initialize handlers
+logger.info("Initializing handlers")
 quiet_channel = QuietChannelHandler(app)
 question_tracker = QuestionTracker(app)
 weekly_summary = WeeklySummary(app)
@@ -25,12 +38,17 @@ command_handler = CommandHandler(app)
 # Register message events
 @app.message("")
 def handle_message(message, say):
+    # Get full message text for better logging
+    text = message.get('text', '')
+    logger.debug(f"Received message: {text[:100]}{'...' if len(text) > 100 else ''}")
+    logger.debug(f"Message details: channel={message.get('channel')}, user={message.get('user')}, ts={message.get('ts')}")
+    
     # Reset quiet channel timer
     quiet_channel.reset_timer(message['channel'])
     
-    # Check for questions
-    if message.get('text', '').strip().endswith('?'):
-        question_tracker.track_question(message)
+    # Always pass to question tracker for analysis
+    logger.info(f"Passing message to question tracker for analysis")
+    question_tracker.track_question(message)
     
     # Update weekly summary data
     weekly_summary.process_message(message)
@@ -47,23 +65,44 @@ def handle_mood_command(ack, command, respond):
     command_handler.analyze_channel_mood(command['channel_id'], respond)
 
 def run_scheduler():
+    logger.info("Starting scheduler thread")
+    
+    # Schedule message fetching every minute
+    schedule.every(1).minutes.do(question_tracker.fetch_recent_messages)
+    logger.info("Scheduled message fetching to run every minute")
+    
     # Schedule question checks every minute
     schedule.every(1).minutes.do(question_tracker.check_unanswered_questions)
+    logger.info("Scheduled question checks to run every minute")
+    
+    # Schedule quiet channel checks every hour
+    schedule.every(1).hour.do(quiet_channel.check_channels)
+    logger.info("Scheduled quiet channel checks to run every hour")
     
     # Schedule weekly summary
     schedule.every().friday.at("16:00").do(weekly_summary.generate_and_post_summary)
+    logger.info("Scheduled weekly summary to run every Friday at 16:00")
     
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+            logger.debug("Scheduler tick - ran pending tasks")
+        except Exception as e:
+            logger.error(f"Error in scheduler: {e}")
         time.sleep(60)
 
 def main():
+    logger.info("Starting Slack Assistant application")
+    
     # Start the scheduler in a separate thread
+    logger.info("Initializing scheduler thread")
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
     scheduler_thread.start()
+    logger.info("Scheduler thread started")
     
     # Start the app
+    logger.info("Starting Socket Mode handler")
     handler = SocketModeHandler(app, Settings.SLACK_APP_TOKEN)
     handler.start()
 
