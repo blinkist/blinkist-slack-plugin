@@ -9,6 +9,7 @@ from handlers.quiet_channel import QuietChannelHandler
 from handlers.question_tracker import QuestionTracker
 from handlers.weekly_summary import WeeklySummary
 from handlers.command_handler import CommandHandler
+from handlers.content_moderator import ContentModerator
 import schedule
 import time
 import threading
@@ -34,10 +35,11 @@ quiet_channel = QuietChannelHandler(app)
 question_tracker = QuestionTracker(app)
 weekly_summary = WeeklySummary(app)
 command_handler = CommandHandler(app)
+content_moderator = ContentModerator(app)
 
 # Register message events
 @app.message("")
-def handle_message(message, say):
+def handle_message(message, say, logger):
     # Get full message text for better logging
     text = message.get('text', '')
     logger.debug(f"Received message: {text[:100]}{'...' if len(text) > 100 else ''}")
@@ -52,6 +54,9 @@ def handle_message(message, say):
     
     # Update weekly summary data
     weekly_summary.process_message(message)
+    
+    # Check message for unprofessional content
+    content_moderator.check_message(message)
 
 # Register slash commands
 @app.command("/tell-joke")
@@ -68,12 +73,12 @@ def run_scheduler():
     logger.info("Starting scheduler thread")
     
     # We still need to check for unanswered questions periodically
-    schedule.every(5).minutes.do(question_tracker.check_unanswered_questions)
-    logger.info("Scheduled question checks to run every 5 minutes")
+    schedule.every(10).minutes.do(question_tracker.check_unanswered_questions)
+    logger.info("Scheduled question checks to run every 10 minutes")
     
     # Check for answers to existing questions
-    schedule.every(5).minutes.do(question_tracker._check_for_answers)
-    logger.info("Scheduled answer checks to run every 5 minutes")
+    schedule.every(10).minutes.do(question_tracker._check_for_answers)
+    logger.info("Scheduled answer checks to run every 10 minutes")
     
     # Schedule quiet channel checks every hour
     schedule.every(1).hour.do(quiet_channel.check_channels)

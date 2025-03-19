@@ -20,7 +20,7 @@ class QuestionTracker:
         self.check_thread.start()
     
     def _periodic_check_worker(self):
-        """Worker function that runs in background thread to check questions every minute"""
+        """Worker function that runs in background thread to check questions periodically"""
         while True:
             try:
                 self.logger.debug("Running scheduled check for unanswered questions")
@@ -30,8 +30,8 @@ class QuestionTracker:
             except Exception as e:
                 self.logger.error(f"Error in periodic question check: {e}")
             
-            # Sleep for 60 seconds (1 minute)
-            time.sleep(60)
+            # Sleep for 5 minutes instead of 1 minute
+            time.sleep(300)  # 5 minutes in seconds
     
     def track_question(self, message):
         """Track a new question - called directly from handle_message"""
