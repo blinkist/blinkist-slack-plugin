@@ -1,0 +1,46 @@
+{
+    "recommendations": [
+        {
+            "title": "Data Science for Business",
+            "author": "Foster Provost & Tom Fawcett",
+            "description": "A comprehensive guide to data-analytic thinking for business professionals.",
+            "tags": ["data science", "business", "analytics"]
+        },
+        {
+            "title": "Storytelling with Data",
+            "author": "Cole Nussbaumer Knaflic",
+            "description": "Learn how to effectively communicate insights through data visualization.",
+            "tags": ["visualization", "communication", "analytics"]
+        },
+        {
+            "title": "Python for Data Analysis",
+            "author": "Wes McKinney",
+            "description": "Essential guide for manipulating, processing, cleaning, and analyzing data in Python.",
+            "tags": ["python", "data analysis", "programming"]
+        },
+        {
+            "title": "Big Data: A Revolution",
+            "author": "Viktor Mayer-Schönberger",
+            "description": "Explore how big data is transforming business, government, and society.",
+            "tags": ["big data", "technology", "society"]
+        },
+        {
+            "title": "The Signal and the Noise",
+            "author": "Nate Silver",
+            "description": "Why so many predictions fail—but some don't. A statistical thinking masterpiece.",
+            "tags": ["statistics", "predictions", "analysis"]
+        },
+        {
+            "title": "Naked Statistics",
+            "author": "Charles Wheelan",
+            "description": "Stripping the dread from the data! A fun introduction to statistical thinking.",
+            "tags": ["statistics", "basics", "introduction"]
+        },
+        {
+            "title": "Data Strategy",
+            "author": "Bernard Marr",
+            "description": "How to profit from a world of big data, analytics and artificial intelligence.",
+            "tags": ["strategy", "business", "AI"]
+        }
+    ]
+} 

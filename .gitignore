@@ -1,0 +1,4 @@
+.env
+config/
+
+src/utils/__pycache__/sentiment.cpython-312.pyc
