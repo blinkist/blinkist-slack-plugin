@@ -10,7 +10,7 @@ class QuestionTracker:
         self.app = app
         self.questions = {}  # Format: {ts: {channel, user, text, timestamp}}
         self.logger = logging.getLogger(__name__)
-        # Start the periodic check
+        # We'll keep periodic checks for safety, but with reduced frequency
         self._start_periodic_check()
     
     def _start_periodic_check(self):
@@ -25,6 +25,8 @@ class QuestionTracker:
             try:
                 self.logger.debug("Running scheduled check for unanswered questions")
                 self.check_unanswered_questions()
+                # Also check for answers to existing questions
+                self._check_for_answers()
             except Exception as e:
                 self.logger.error(f"Error in periodic question check: {e}")
             
@@ -32,7 +34,7 @@ class QuestionTracker:
             time.sleep(60)
     
     def track_question(self, message):
-        """Track a new question"""
+        """Track a new question - called directly from handle_message"""
         # Basic question detection
         text = message.get('text', '').strip()
         self.logger.info(f"Analyzing potential question: {text[:100]}{'...' if len(text) > 100 else ''}")
@@ -145,6 +147,23 @@ class QuestionTracker:
         except Exception as e:
             self.logger.error(f"Error sending reminder: {e}")
     
+    def _check_for_answers(self):
+        """Check if any tracked questions have been answered and remove them from tracking"""
+        self.logger.info(f"Checking for answers to {len(self.questions)} tracked questions")
+        
+        for ts, question in list(self.questions.items()):
+            try:
+                self.logger.debug(f"Checking if question in channel {question['channel']}, ts {ts} has been answered")
+                replies = self.app.client.conversations_replies(
+                    channel=question['channel'],
+                    ts=ts
+                )
+                if len(replies['messages']) > 1:  # Has replies
+                    self.logger.info(f"Question has {len(replies['messages'])-1} replies, removing from tracking")
+                    del self.questions[ts]
+            except Exception as e:
+                self.logger.error(f"Error checking replies for question {ts}: {e}")
+    
     def fetch_recent_messages(self, minutes=5):
         """Fetch recent messages from channels to analyze for questions
         
@@ -240,21 +259,4 @@ class QuestionTracker:
             self.logger.info(f"Message fetch complete. Analyzed {messages_analyzed} messages, found {questions_found} questions")
         
         except Exception as e:
-            self.logger.error(f"Error listing channels: {e}")
-
-    def _check_for_answers(self):
-        """Check if any tracked questions have been answered and remove them from tracking"""
-        self.logger.info(f"Checking for answers to {len(self.questions)} tracked questions")
-        
-        for ts, question in list(self.questions.items()):
-            try:
-                self.logger.debug(f"Checking if question in channel {question['channel']}, ts {ts} has been answered")
-                replies = self.app.client.conversations_replies(
-                    channel=question['channel'],
-                    ts=ts
-                )
-                if len(replies['messages']) > 1:  # Has replies
-                    self.logger.info(f"Question has {len(replies['messages'])-1} replies, removing from tracking")
-                    del self.questions[ts]
-            except Exception as e:
-                self.logger.error(f"Error checking replies for question {ts}: {e}") 
+            self.logger.error(f"Error listing channels: {e}") 

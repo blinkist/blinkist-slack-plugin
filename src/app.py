@@ -67,13 +67,13 @@ def handle_mood_command(ack, command, respond):
 def run_scheduler():
     logger.info("Starting scheduler thread")
     
-    # Schedule message fetching every minute
-    schedule.every(1).minutes.do(question_tracker.fetch_recent_messages)
-    logger.info("Scheduled message fetching to run every minute")
+    # We still need to check for unanswered questions periodically
+    schedule.every(5).minutes.do(question_tracker.check_unanswered_questions)
+    logger.info("Scheduled question checks to run every 5 minutes")
     
-    # Schedule question checks every minute
-    schedule.every(1).minutes.do(question_tracker.check_unanswered_questions)
-    logger.info("Scheduled question checks to run every minute")
+    # Check for answers to existing questions
+    schedule.every(5).minutes.do(question_tracker._check_for_answers)
+    logger.info("Scheduled answer checks to run every 5 minutes")
     
     # Schedule quiet channel checks every hour
     schedule.every(1).hour.do(quiet_channel.check_channels)
