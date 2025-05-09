@@ -58,8 +58,8 @@ class QuietChannelHandler:
         self.last_message_times[channel] = current_time
         self.logger.debug(f"Reset quiet timer for channel {channel}")
         
-        # Calculate when the next check should happen
-        next_check_time = current_time + (float(os.environ.get("QUIET_THRESHOLD_HOURS", "4")) * 3600)
+        # Calculate when the next check should happen (now in minutes)
+        next_check_time = current_time + (float(os.environ.get("QUIET_THRESHOLD_MINUTES", "10")) * 60)
         next_check_datetime = datetime.fromtimestamp(next_check_time)
         self.logger.info(f"Channel {channel} activity detected. Next quiet check scheduled for {next_check_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
     
@@ -75,20 +75,22 @@ class QuietChannelHandler:
             return
             
         current_time = time.time()
-        quiet_threshold_hours = float(os.environ.get("QUIET_THRESHOLD_HOURS", "4"))
+        # Change from hours to minutes and set default to 10 minutes
+        quiet_threshold_minutes = float(os.environ.get("QUIET_THRESHOLD_MINUTES", "10"))
         
         for channel, last_message_time in self.last_message_times.items():
             last_nudge_time = self.last_nudge_times.get(channel, 0)
             
-            hours_since_message = (current_time - last_message_time) / 3600
-            hours_since_nudge = (current_time - last_nudge_time) / 3600
+            # Convert calculations from hours to minutes
+            minutes_since_message = (current_time - last_message_time) / 60
+            minutes_since_nudge = (current_time - last_nudge_time) / 60
             
-            self.logger.debug(f"Channel {channel}: {hours_since_message:.1f} hours since last message, {hours_since_nudge:.1f} hours since last nudge")
+            self.logger.debug(f"Channel {channel}: {minutes_since_message:.1f} minutes since last message, {minutes_since_nudge:.1f} minutes since last nudge")
             
             # Send nudge if channel is quiet and we haven't sent one recently
-            if (hours_since_message >= quiet_threshold_hours and 
-                hours_since_nudge >= quiet_threshold_hours):
-                self.logger.info(f"Channel {channel} is quiet ({hours_since_message:.1f} hours). Sending nudge.")
+            if (minutes_since_message >= quiet_threshold_minutes and 
+                minutes_since_nudge >= quiet_threshold_minutes):
+                self.logger.info(f"Channel {channel} is quiet ({minutes_since_message:.1f} minutes). Sending nudge.")
                 self.send_nudge(channel)
                 self.last_nudge_times[channel] = current_time
             else:

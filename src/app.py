@@ -80,9 +80,9 @@ def run_scheduler():
     schedule.every(10).minutes.do(question_tracker._check_for_answers)
     logger.info("Scheduled answer checks to run every 10 minutes")
     
-    # Schedule quiet channel checks every hour
-    schedule.every(1).hour.do(quiet_channel.check_channels)
-    logger.info("Scheduled quiet channel checks to run every hour")
+    # Schedule quiet channel checks every 5 minutes instead of every hour
+    schedule.every(5).minutes.do(quiet_channel.check_channels)
+    logger.info("Scheduled quiet channel checks to run every 5 minutes")
     
     # Schedule weekly summary
     schedule.every().friday.at("16:00").do(weekly_summary.generate_and_post_summary)

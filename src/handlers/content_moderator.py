@@ -15,25 +15,6 @@ class ContentModerator:
         
         self.openai_client = openai.OpenAI(api_key=openai_api_key)
         
-        # Resources for improving communication
-        self.resources = [
-            {"title": "Crucial Conversations: Tools for Talking When Stakes Are High", 
-             "author": "Kerry Patterson, Joseph Grenny, Ron McMillan, Al Switzler",
-             "description": "Offers techniques for effective communication in high-stakes situations."},
-            {"title": "Nonviolent Communication: A Language of Life", 
-             "author": "Marshall B. Rosenberg",
-             "description": "Provides a framework for compassionate communication."},
-            {"title": "The Definitive Book of Body Language", 
-             "author": "Allan & Barbara Pease",
-             "description": "Helps understand nonverbal communication cues."},
-            {"title": "Thanks for the Feedback", 
-             "author": "Douglas Stone & Sheila Heen",
-             "description": "Offers insights on receiving and processing feedback effectively."},
-            {"title": "Difficult Conversations: How to Discuss What Matters Most", 
-             "author": "Douglas Stone, Bruce Patton, Sheila Heen",
-             "description": "Provides strategies for navigating challenging discussions."}
-        ]
-        
         self.logger.info("Content moderator initialized")
     
     def check_message(self, message):
