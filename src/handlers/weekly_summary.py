@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from collections import Counter, defaultdict
 import json
-from config.settings import Settings
 from utils.sentiment import analyze_sentiment
 import random
 
@@ -73,7 +72,7 @@ class WeeklySummary:
         
         try:
             self.app.client.chat_postMessage(
-                channel=Settings.SUMMARY_CHANNEL,
+                channel=os.environ.get('SUMMARY_CHANNEL'),
                 text=summary,
                 unfurl_links=False
             )
