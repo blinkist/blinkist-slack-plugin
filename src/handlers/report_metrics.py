@@ -31,7 +31,7 @@ class ReportMetrics:
         try:
             # Get the raw message data
             df = self._process_channel_data()
-            
+
             if df.empty:
                 logger.info("No messages found in the specified time period")
                 return "No messages found in the specified time period"
@@ -54,21 +54,17 @@ class ReportMetrics:
 
     def _format_slack_message(
         self, 
-        metrics: Dict[str, Dict[str, Dict[str, int]]]
+        metrics: Dict[str, Dict[str, int]]
     ) -> Dict[str, Any]:
         """Format the metrics into a Slack message using Block Kit.
         
         Args:
-            metrics (Dict[str, Dict[str, Dict[str, int]]]): Dictionary containing
-                all computed metrics, where each metric maps channel names to
-                their respective counts
+            metrics (Dict[str, Dict[str, int]]): Dictionary mapping channel names to
+                their respective subtype counts
             
         Returns:
             Dict[str, Any]: Slack message JSON payload with blocks
         """
-        # Get message counts from metrics
-        message_counts = metrics["message_counts"]
-        
         # Initialize blocks list
         blocks = [
             {
@@ -84,7 +80,7 @@ class ReportMetrics:
             }
         ]
         
-        for channel_name, counts in message_counts.items():
+        for channel_name, counts in metrics.items():
             # Add channel header
             blocks.append({
                 "type": "section",
@@ -131,19 +127,30 @@ class ReportMetrics:
         all_messages = []
         
         for channel in channels:
+            # # TODO: remove the specific channel
+            # if channel["id"] == "C08PL2QDB2T":
             channel_id = channel["id"]
             channel_name = channel["name"]
-            messages = self._fetch_channel_history(channel_id)
+
+            try:
+                # Add messages from this page
+                messages = self._fetch_channel_history(channel_id)
+         
+                for message in messages:
+                    all_messages.append({
+                        "channel_id": channel_id,
+                        "channel_name": channel_name,
+                        "ts": message.get("ts"),
+                        "message": message.get("text", ""),
+                        "type": message.get("type", "message"),  # Default to "message" if not specified
+                        "subtype": message.get("subtype", "message")  # Default string if no subtype
+                    })
             
-            for message in messages:
-                all_messages.append({
-                    "channel_id": channel_id,
-                    "channel_name": channel_name,
-                    "ts": message.get("ts"),
-                    "message": message.get("text", ""),
-                    "type": message.get("type", "message"),  # Default to "message" if not specified
-                    "subtype": message.get("subtype", "default")  # Default string if no subtype
-                })
+            except Exception as e:
+                logger.error(
+                    f"Error processing channel {channel_name} ({channel_id}): {str(e)}"
+                )
+                continue
         
         # Create DataFrame
         df = pd.DataFrame(all_messages)
@@ -166,8 +173,9 @@ class ReportMetrics:
             
             while True:
                 # Prepare parameters for the API call
+                # TODO: remove the private channel
                 params = {
-                    "types": "public_channel",
+                    "types": ["public_channel", "private_channel"],
                     "exclude_archived": True,
                     "limit": 100  # Maximum allowed by Slack API
                 }
@@ -198,7 +206,7 @@ class ReportMetrics:
         except Exception as e:
             logger.error(f"Error fetching public channels: {str(e)}")
             return []
-    
+   
     def _fetch_channel_history(self, channel_id: str) -> List[Dict[str, Any]]:
         """Fetch conversation history for a specific channel.
         
@@ -221,9 +229,13 @@ class ReportMetrics:
                 params = {
                     "channel": channel_id,
                     "inclusive": True,
-                    "limit": 200,  # Recommended by Slack API
+                    "limit": 200,
                     "oldest": str(oldest_ts)
                 }
+                
+                # Add latest timestamp if we have one
+                if "latest" in locals():
+                    params["latest"] = latest
                 
                 # Add cursor if we have one
                 if cursor:
@@ -250,7 +262,7 @@ class ReportMetrics:
                 # Get the timestamp of the last message for time-based pagination
                 if messages:
                     last_message = messages[-1]
-                    params["latest"] = last_message["ts"]
+                    latest = last_message["ts"]
                 
                 # Get cursor for next page if available
                 cursor = response.get("response_metadata", {}).get("next_cursor")
