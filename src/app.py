@@ -12,6 +12,7 @@ load_dotenv('.env')
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from utils.channel_utils import ChannelTracker
 from handlers.quiet_channel import QuietChannelHandler
 from handlers.question_tracker import QuestionTracker
 from handlers.weekly_summary import WeeklySummary
@@ -21,12 +22,17 @@ from handlers.report_metrics import ReportMetrics
 # Initialize the Slack app
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
+# Initialize channel tracker
+channel_tracker = ChannelTracker(app)
+
 # Initialize handlers
 quiet_channel = QuietChannelHandler(app)
 question_tracker = QuestionTracker(app)
 weekly_summary = WeeklySummary(app)
 command_handler = CommandHandler(app)
-report_metrics = ReportMetrics(app)
+report_metrics = ReportMetrics(app, channel_tracker)
+
+channel_tracker.update_installed_channels()  # TODO: remove this once scheduler works
 
 # Register message events
 @app.message("")
@@ -84,6 +90,10 @@ def pulse_report_command(ack, command, respond):
         respond("Sorry, there was an error generating the report")
 
 def run_scheduler():
+    # Schedule channel tracker every morning
+    # schedule.every().day.at("08:00").do(channel_tracker.update_installed_channels)
+    schedule.every(5).minutes.do(channel_tracker.update_installed_channels)  # TODO: remove this
+
     # Schedule question checks every minute
     schedule.every(1).minutes.do(question_tracker.check_unanswered_questions)
     
