@@ -8,13 +8,15 @@ logger = logging.getLogger(__name__)
 class ReportMetrics:
     """Class to handle fetching and processing Slack channel metrics."""
  
-    def __init__(self, app):
+    def __init__(self, app, channel_tracker):
         """Initialize the ReportMetrics class.
 
         Args:
             app: The Slack app instance
+            channel_tracker: channel tracker instance
         """
         self.app = app
+        self.channel_tracker = channel_tracker
         self.channels_data = []
 
     def generate_report(self, days: int = 30) -> str:
@@ -37,12 +39,10 @@ class ReportMetrics:
                 return "No messages found in the specified time period"
                 
             # Compute metrics
-            metrics = {
-                "message_counts": self._compute_message_counts(df)
-            }
+            metrics = self._compute_message_counts(df)
             
             logger.info(
-                f"Successfully computed metrics for {len(metrics['message_counts'])} channels"
+                f"Successfully computed metrics for {len(metrics)} channels"
             )
             
             # Format and return the Slack message
@@ -123,16 +123,27 @@ class ReportMetrics:
             pd.DataFrame: DataFrame containing channel_id, channel_name, timestamp,
                          message data, message type and subtype
         """
-        channels = self._fetch_public_channels()
+        # Get list of channels where bot is installed
+        installed_channels = self.channel_tracker.get_installed_channels()
+        if not installed_channels:
+            logger.warning("No installed channels found")
+            return pd.DataFrame()
+        
         all_messages = []
         
-        for channel in channels:
-            # # TODO: remove the specific channel
-            # if channel["id"] == "C08PL2QDB2T":
-            channel_id = channel["id"]
-            channel_name = channel["name"]
-
+        for channel_id in installed_channels:
             try:
+                # Get channel info
+                channel_info = self.app.client.conversations_info(channel=channel_id)
+                if not channel_info["ok"]:
+                    logger.error(
+                        f"Failed to get info for channel {channel_id}: "
+                        f"{channel_info['error']}"
+                    )
+                    continue
+                    
+                channel_name = channel_info["channel"]["name"]
+                
                 # Add messages from this page
                 messages = self._fetch_channel_history(channel_id)
          
@@ -148,7 +159,7 @@ class ReportMetrics:
             
             except Exception as e:
                 logger.error(
-                    f"Error processing channel {channel_name} ({channel_id}): {str(e)}"
+                    f"Error processing channel {channel_id}: {str(e)}"
                 )
                 continue
         
@@ -161,52 +172,6 @@ class ReportMetrics:
             
         return df
         
-    def _fetch_public_channels(self) -> List[Dict[str, Any]]:
-        """Fetch all public channels from the Slack workspace that app has been invited to.
-        
-        Returns:
-            List[Dict[str, Any]]: List of active public channel objects
-        """
-        try:
-            all_channels = []
-            cursor = None
-            
-            while True:
-                # Prepare parameters for the API call
-                # TODO: remove the private channel
-                params = {
-                    "types": ["public_channel", "private_channel"],
-                    "exclude_archived": True,
-                    "limit": 100  # Maximum allowed by Slack API
-                }
-                
-                # Add cursor if we have one
-                if cursor:
-                    params["cursor"] = cursor
-                
-                response = self.app.client.conversations_list(**params)
-                
-                if not response["ok"]:
-                    logger.error(f"Failed to fetch channels: {response['error']}")
-                    return all_channels
-                
-                # Add channels from this page
-                all_channels.extend(response["channels"])
-                
-                # Check if there are more pages
-                if not response.get("response_metadata", {}).get("next_cursor"):
-                    break
-                    
-                # Get cursor for next page
-                cursor = response["response_metadata"]["next_cursor"]
-            
-            logger.info(f"Fetched {len(all_channels)} public channels")
-            return all_channels
-            
-        except Exception as e:
-            logger.error(f"Error fetching public channels: {str(e)}")
-            return []
-   
     def _fetch_channel_history(self, channel_id: str) -> List[Dict[str, Any]]:
         """Fetch conversation history for a specific channel.
         
