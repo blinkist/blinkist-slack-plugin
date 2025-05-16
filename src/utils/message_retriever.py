@@ -64,14 +64,26 @@ class MessageRetriever:
 
                     # Process messages
                     for message in messages:
+                        # Add the main message
                         all_messages.append({
                             "channel_id": channel_id,
                             "channel_name": channel_info["name"],
                             "ts": message.get("ts"),
                             "message": message.get("text", ""),
                             "type": message.get("type", "message"),
-                            "subtype": message.get("subtype", "message")
+                            "subtype": message.get("subtype", "message"),
+                            "is_thread": bool(message.get("thread_ts")),
+                            "is_parent": message.get("ts") == message.get("thread_ts") if message.get("thread_ts") else None
                         })
+
+                        # Process thread replies if any
+                        if message.get("thread_ts") and message.get("reply_count", 0) > 0:
+                            thread_messages = self._process_thread_replies(
+                                channel_id, 
+                                message["thread_ts"],
+                                channel_info["name"]
+                            )
+                            all_messages.extend(thread_messages)
 
                     logger.info(
                         f"Fetched {len(messages)} messages from channel {channel_id} "
@@ -213,3 +225,90 @@ class MessageRetriever:
                 f"Error fetching history for channel {channel_id}: {str(e)}"
             )
             return [] 
+
+    def _process_thread_replies(
+        self, 
+        channel_id: str, 
+        thread_ts: str,
+        channel_name: str
+    ) -> List[Dict[str, Any]]:
+        """Process thread replies for a message.
+
+        Args:
+            channel_id: The ID of the channel
+            thread_ts: The timestamp of the thread parent message
+            channel_name: The name of the channel
+
+        Returns:
+            List[Dict[str, Any]]: List of thread reply messages
+        """
+        thread_messages = []
+        cursor = None
+        latest = None
+
+        try:
+            while True:
+                # Prepare parameters for the API call
+                params = {
+                    "channel": channel_id,
+                    "ts": thread_ts,
+                    "inclusive": True,
+                    "limit": 200
+                }
+
+                # Add latest timestamp if we have one
+                if latest:
+                    params["latest"] = latest
+
+                # Add cursor if we have one
+                if cursor:
+                    params["cursor"] = cursor
+
+                # Fetch thread replies
+                thread_replies = self.app.client.conversations_replies(**params)
+                
+                if not thread_replies["ok"]:
+                    logger.error(
+                        f"Failed to fetch thread replies: {thread_replies['error']}"
+                    )
+                    break
+
+                messages = thread_replies["messages"]
+                if len(messages) > 1:  # Skip first message as it's the parent
+                    for reply in messages[1:]:
+                        thread_messages.append({
+                            "channel_id": channel_id,
+                            "channel_name": channel_name,
+                            "ts": reply.get("ts"),
+                            "message": reply.get("text", ""),
+                            "type": reply.get("type", "message"),
+                            "subtype": reply.get("subtype", "message"),
+                            "is_thread": True,
+                            "is_parent": reply.get("ts") == reply.get("thread_ts"),
+                            "thread_ts": thread_ts
+                        })
+
+                # Check if there are more pages
+                if not thread_replies.get("has_more", False):
+                    break
+
+                # Get the timestamp of the last message for time-based pagination
+                if messages:
+                    last_message = messages[-1]
+                    latest = last_message["ts"]
+
+                # Get cursor for next page if available
+                cursor = thread_replies.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+
+            logger.info(
+                f"Fetched {len(thread_messages)} thread replies for message {thread_ts}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error fetching thread replies for message {thread_ts}: {str(e)}"
+            )
+        
+        return thread_messages 
