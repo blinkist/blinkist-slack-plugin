@@ -73,7 +73,8 @@ class MessageRetriever:
                             "type": message.get("type", "message"),
                             "subtype": message.get("subtype", "message"),
                             "is_thread": bool(message.get("thread_ts")),
-                            "is_parent": message.get("ts") == message.get("thread_ts") if message.get("thread_ts") else None
+                            "is_parent": message.get("ts") == message.get("thread_ts") if message.get("thread_ts") else None,
+                            "user_id": message.get("user")
                         })
 
                         # Process thread replies if any
@@ -285,7 +286,8 @@ class MessageRetriever:
                             "subtype": reply.get("subtype", "message"),
                             "is_thread": True,
                             "is_parent": reply.get("ts") == reply.get("thread_ts"),
-                            "thread_ts": thread_ts
+                            "thread_ts": thread_ts,
+                            "user_id": reply.get("user")
                         })
 
                 # Check if there are more pages
