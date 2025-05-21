@@ -223,7 +223,6 @@ class ReportMetrics:
                     if len(channel_counts) < 2:
                         # Not enough users to calculate meaningful equity
                         logger.info(f"Not enough users to calculate meaningful equity for channel {channel_name}")
-                        metrics[channel_name]['participation_equity_index'] = pd.NA
                         continue
                     
                     # Sort message counts
@@ -237,13 +236,11 @@ class ReportMetrics:
                             f"Channel {channel_name} has only {total_sum} messages, "
                             "skipping PEI calculation"
                         )
-                        metrics[channel_name]['participation_equity_index'] = pd.NA
                         continue
                     
                     if total_sum == 0:
                         # All users have zero messages
                         logger.info(f"All users have zero messages for channel {channel_name}")
-                        metrics[channel_name]['participation_equity_index'] = pd.NA
                         continue
                     
                     # Calculate Gini coefficient using discrete formula
@@ -263,7 +260,6 @@ class ReportMetrics:
                     
                 except KeyError:
                     # Channel has no valid messages
-                    metrics[channel_name]['participation_equity_index'] = pd.NA
                     continue
                 
         except Exception as e:
