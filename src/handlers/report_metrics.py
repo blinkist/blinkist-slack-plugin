@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import Dict, Any
 import logging
 import pandas as pd
 from utils.message_retriever import MessageRetriever
@@ -161,5 +161,88 @@ class ReportMetrics:
             
         except Exception as e:
             logger.error(f"Error computing message counts: {str(e)}")
+            return {}
+
+    def _compute_participation_equity_index(self, df: pd.DataFrame) -> Dict[str, float]:
+        """Compute Participation Equity Index (PEI) for each channel using Gini coefficient.
+        
+        The PEI is calculated as follows:
+        1. For each channel, count messages per user (only 'message' and 'thread_broadcast' types)
+        2. Compute Gini coefficient using the discrete formula:
+           G = (1/(n*sum(x_i))) * sum((2*i - n - 1)*x_i)
+           where:
+           - n is the number of users
+           - x_i are the sorted message counts
+           - i is the rank (1 to n)
+        3. Compute PEI as 1 - |Gini|
+        
+        Example:
+        Channel messages: User1=2, User2=6, User3=4, User4=8
+        Sorted: [2, 4, 6, 8]
+        n = 4, sum = 20
+        Gini = (1/(4*20)) * ((2*1-4-1)*2 + (2*2-4-1)*4 + (2*3-4-1)*6 + (2*4-4-1)*8)
+             = (1/80) * (-3*2 + -1*4 + 1*6 + 3*8)
+             = (1/80) * (-6 + -4 + 6 + 24)
+             = 20/80 = 0.25
+        PEI = 1 - 0.25 = 0.75 (higher is more equitable)
+        
+        Args:
+            df (pd.DataFrame): DataFrame containing message data with columns:
+                - channel_name: Name of the channel
+                - user_id: ID of the user who sent the message
+                - subtype: Type of the message
+                
+        Returns:
+            Dict[str, float]: Dictionary mapping channel names to their PEI values
+                (0 to 1, where 1 is perfectly equitable and 0 is completely inequitable)
+        """
+        try:
+            # Filter for relevant message types
+            valid_messages = df[df['subtype'].isin(['message', 'thread_broadcast'])]
+            
+            # Group by channel and user to get message counts
+            user_counts = valid_messages.groupby(['channel_name', 'user_id']).size()
+            
+            # Calculate PEI for each channel
+            channel_pei = {}
+            
+            for channel in df['channel_name'].unique():
+                # Get message counts for this channel
+                channel_counts = user_counts[channel]
+                
+                if len(channel_counts) < 2:
+                    # Not enough users to calculate meaningful equity
+                    channel_pei[channel] = pd.NA
+                    continue
+                
+                # Sort message counts
+                sorted_counts = sorted(channel_counts)
+                n = len(sorted_counts)
+                total_sum = sum(sorted_counts)
+                
+                if total_sum == 0:
+                    # All users have zero messages
+                    channel_pei[channel] = pd.NA
+                    continue
+                
+                # Calculate Gini coefficient using discrete formula
+                weighted_sum = sum(
+                    (2 * i - n - 1) * x 
+                    for i, x in enumerate(sorted_counts, start=1)
+                )
+                gini = abs(weighted_sum / (n * total_sum))
+                
+                # Calculate PEI (1 - Gini)
+                pei = 1 - gini
+                channel_pei[channel] = pei
+                
+                logger.info(
+                    f"Channel {channel} PEI: {pei:.3f} (based on {n} users)"
+                )
+            
+            return channel_pei
+            
+        except Exception as e:
+            logger.error(f"Error computing PEI: {str(e)}")
             return {}
  
