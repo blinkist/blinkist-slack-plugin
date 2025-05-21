@@ -44,7 +44,7 @@ class MessageRetriever:
                 - is_parent: Boolean indicating if message is a thread parent (True),
                     thread reply (False), or unthreaded message (None)
                 - user_id: ID of the user who sent the message
-                - thread_ts: Timestamp of the parent message (only for thread replies)
+                - thread_id: ID of the thread this message belongs to (same as ts for parent/unthreaded messages)
         """
         try:
             # Get list of channels to process
@@ -69,6 +69,16 @@ class MessageRetriever:
 
                     # Process messages
                     for message in messages:
+                        # Determine thread_id
+                        thread_ts = message.get("thread_ts")
+                        is_thread = bool(thread_ts)
+                        is_parent = message.get("ts") == thread_ts if thread_ts else None
+                        
+                        # Use thread_ts as thread_id for both parent messages and replies
+                        # For unthreaded messages, use their own ts as thread_id
+                        # Convert to string to ensure thread_id is always a string identifier
+                        thread_id = str(thread_ts if is_thread else message.get("ts"))
+                        
                         # Add the main message
                         all_messages.append({
                             "channel_id": channel_id,
@@ -77,16 +87,17 @@ class MessageRetriever:
                             "message": message.get("text", ""),
                             "type": message.get("type", "message"),
                             "subtype": message.get("subtype", "message"),
-                            "is_thread": bool(message.get("thread_ts")),
-                            "is_parent": message.get("ts") == message.get("thread_ts") if message.get("thread_ts") else None,
-                            "user_id": message.get("user")
+                            "is_thread": is_thread,
+                            "is_parent": is_parent,
+                            "user_id": message.get("user"),
+                            "thread_id": thread_id
                         })
 
                         # Process thread replies if any
-                        if message.get("thread_ts") and message.get("reply_count", 0) > 0:
+                        if is_thread and message.get("reply_count", 0) > 0:
                             thread_messages = self._get_thread_replies(
                                 channel_id, 
-                                message["thread_ts"],
+                                thread_ts,
                                 channel_info["name"]
                             )
                             all_messages.extend(thread_messages)
@@ -291,8 +302,8 @@ class MessageRetriever:
                             "subtype": reply.get("subtype", "message"),
                             "is_thread": True,
                             "is_parent": reply.get("ts") == reply.get("thread_ts"),
-                            "thread_ts": thread_ts,
-                            "user_id": reply.get("user")
+                            "user_id": reply.get("user"),
+                            "thread_id": str(thread_ts)  # Convert to string to ensure consistent type
                         })
 
                 # Check if there are more pages
