@@ -37,9 +37,18 @@ class ReportMetrics:
             if df.empty:
                 logger.info("No messages found in the specified time period")
                 return "No messages found in the specified time period"
-                
-            # Compute metrics
-            metrics = self._compute_message_counts(df)
+            
+            # Initialize metrics dictionary with channel names
+            metrics = {
+                channel_name: {} 
+                for channel_name in df['channel_name'].unique()
+            }
+            
+            # Add message counts to metrics
+            self._compute_message_counts(df, metrics)
+            
+            # Add participation equity index to metrics
+            self._compute_participation_equity_index(df, metrics)
             
             logger.info(
                 f"Successfully computed metrics for {len(metrics)} channels"
@@ -54,13 +63,13 @@ class ReportMetrics:
 
     def _format_slack_message(
         self, 
-        metrics: Dict[str, Dict[str, int]]
+        metrics: Dict[str, Dict[str, Dict[str, int]]]
     ) -> Dict[str, Any]:
         """Format the metrics into a Slack message using Block Kit.
         
         Args:
-            metrics (Dict[str, Dict[str, int]]): Dictionary mapping channel names to
-                their respective subtype counts
+            metrics (Dict[str, Dict[str, Dict[str, int]]]): Dictionary mapping channel names to
+                their metrics including message counts and participation equity index
             
         Returns:
             Dict[str, Any]: Slack message JSON payload with blocks
@@ -80,7 +89,7 @@ class ReportMetrics:
             }
         ]
         
-        for channel_name, counts in metrics.items():
+        for channel_name, channel_metrics in metrics.items():
             # Add channel header
             blocks.append({
                 "type": "section",
@@ -90,9 +99,20 @@ class ReportMetrics:
                 }
             })
             
-            # Sort subtypes by count (descending)
+            # Add PEI if available
+            if 'participation_equity_index' in channel_metrics:
+                pei = channel_metrics['participation_equity_index']
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"• Participation Equity Index: {pei:.2f}"
+                    }
+                })
+            
+            # Sort message counts by count (descending)
             sorted_counts = sorted(
-                counts.items(),
+                channel_metrics['message_counts'].items(),
                 key=lambda x: x[1],
                 reverse=True
             )
@@ -132,38 +152,39 @@ class ReportMetrics:
             logger.error(f"Error processing channel data: {str(e)}")
             return pd.DataFrame()
         
-    def _compute_message_counts(self, df: pd.DataFrame) -> Dict[str, Dict[str, int]]:
+    def _compute_message_counts(
+        self, 
+        df: pd.DataFrame,
+        metrics: Dict[str, Dict[str, Dict[str, int]]]
+    ) -> None:
         """Compute message counts by subtype for each channel.
         
         Args:
             df (pd.DataFrame): DataFrame containing message data
-            
-        Returns:
-            Dict[str, Dict[str, int]]: Dictionary mapping channel_id to 
-                dictionary of subtype counts
+            metrics (Dict[str, Dict[str, Dict[str, int]]]): Dictionary to update with message counts
         """
         try:
             # Group by channel and subtype, then count messages
             counts = df.groupby(['channel_name', 'subtype']).size().reset_index(name='count')
             
-            # Convert to nested dictionary format
-            result = {}
+            # Add message counts to metrics dictionary
             for _, row in counts.iterrows():
                 channel_name = row['channel_name']
                 subtype = row['subtype']
                 count = row['count']
                 
-                if channel_name not in result:
-                    result[channel_name] = {}
-                result[channel_name][subtype] = count
+                if 'message_counts' not in metrics[channel_name]:
+                    metrics[channel_name]['message_counts'] = {}
+                metrics[channel_name]['message_counts'][subtype] = count
                 
-            return result
-            
         except Exception as e:
             logger.error(f"Error computing message counts: {str(e)}")
-            return {}
 
-    def _compute_participation_equity_index(self, df: pd.DataFrame) -> Dict[str, float]:
+    def _compute_participation_equity_index(
+        self, 
+        df: pd.DataFrame,
+        metrics: Dict[str, Dict[str, Dict[str, int]]]
+    ) -> None:
         """Compute Participation Equity Index (PEI) for each channel using Gini coefficient.
         
         The PEI is calculated as follows:
@@ -191,10 +212,7 @@ class ReportMetrics:
                 - channel_name: Name of the channel
                 - user_id: ID of the user who sent the message
                 - subtype: Type of the message
-                
-        Returns:
-            Dict[str, float]: Dictionary mapping channel names to their PEI values
-                (0 to 1, where 1 is perfectly equitable and 0 is completely inequitable)
+            metrics (Dict[str, Dict[str, Dict[str, int]]]): Dictionary to update with PEI values
         """
         try:
             # Filter for relevant message types
@@ -204,45 +222,48 @@ class ReportMetrics:
             user_counts = valid_messages.groupby(['channel_name', 'user_id']).size()
             
             # Calculate PEI for each channel
-            channel_pei = {}
-            
-            for channel in df['channel_name'].unique():
-                # Get message counts for this channel
-                channel_counts = user_counts[channel]
-                
-                if len(channel_counts) < 2:
-                    # Not enough users to calculate meaningful equity
-                    channel_pei[channel] = pd.NA
+            for channel_name in metrics.keys():
+                try:
+                    # Get message counts for this channel
+                    channel_counts = user_counts[channel_name]
+                    
+                    if len(channel_counts) < 2:
+                        # Not enough users to calculate meaningful equity
+                        logger.info(f"Not enough users to calculate meaningful equity for channel {channel_name}")
+                        metrics[channel_name]['participation_equity_index'] = pd.NA
+                        continue
+                    
+                    # Sort message counts
+                    sorted_counts = sorted(channel_counts)
+                    n = len(sorted_counts)
+                    total_sum = sum(sorted_counts)
+                    
+                    if total_sum == 0:
+                        # All users have zero messages
+                        logger.info(f"All users have zero messages for channel {channel_name}")
+                        metrics[channel_name]['participation_equity_index'] = pd.NA
+                        continue
+                    
+                    # Calculate Gini coefficient using discrete formula
+                    weighted_sum = sum(
+                        (2 * i - n - 1) * x 
+                        for i, x in enumerate(sorted_counts, start=1)
+                    )
+                    gini = abs(weighted_sum / (n * total_sum))
+                    
+                    # Calculate PEI (1 - Gini)
+                    pei = 1 - gini
+                    metrics[channel_name]['participation_equity_index'] = pei
+                    
+                    logger.info(
+                        f"Channel {channel_name} PEI: {pei:.3f} (based on {n} users)"
+                    )
+                    
+                except KeyError:
+                    # Channel has no valid messages
+                    metrics[channel_name]['participation_equity_index'] = pd.NA
                     continue
                 
-                # Sort message counts
-                sorted_counts = sorted(channel_counts)
-                n = len(sorted_counts)
-                total_sum = sum(sorted_counts)
-                
-                if total_sum == 0:
-                    # All users have zero messages
-                    channel_pei[channel] = pd.NA
-                    continue
-                
-                # Calculate Gini coefficient using discrete formula
-                weighted_sum = sum(
-                    (2 * i - n - 1) * x 
-                    for i, x in enumerate(sorted_counts, start=1)
-                )
-                gini = abs(weighted_sum / (n * total_sum))
-                
-                # Calculate PEI (1 - Gini)
-                pei = 1 - gini
-                channel_pei[channel] = pei
-                
-                logger.info(
-                    f"Channel {channel} PEI: {pei:.3f} (based on {n} users)"
-                )
-            
-            return channel_pei
-            
         except Exception as e:
             logger.error(f"Error computing PEI: {str(e)}")
-            return {}
  
