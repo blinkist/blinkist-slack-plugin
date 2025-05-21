@@ -5,6 +5,9 @@ from utils.message_retriever import MessageRetriever
 
 logger = logging.getLogger(__name__)
 
+# Minimum number of messages required in a channel to compute PEI
+MIN_MESSAGES_FOR_PEI = 10
+
 class ReportMetrics:
     """Class to handle fetching and processing Slack channel metrics."""
  
@@ -189,23 +192,13 @@ class ReportMetrics:
         
         The PEI is calculated as follows:
         1. For each channel, count messages per user (only 'message' and 'thread_broadcast' types)
-        2. Compute Gini coefficient using the discrete formula:
+        2. Compute Gini coefficient using the formula for discrete data:
            G = (1/(n*sum(x_i))) * sum((2*i - n - 1)*x_i)
            where:
            - n is the number of users
            - x_i are the sorted message counts
            - i is the rank (1 to n)
-        3. Compute PEI as 1 - |Gini|
-        
-        Example:
-        Channel messages: User1=2, User2=6, User3=4, User4=8
-        Sorted: [2, 4, 6, 8]
-        n = 4, sum = 20
-        Gini = (1/(4*20)) * ((2*1-4-1)*2 + (2*2-4-1)*4 + (2*3-4-1)*6 + (2*4-4-1)*8)
-             = (1/80) * (-3*2 + -1*4 + 1*6 + 3*8)
-             = (1/80) * (-6 + -4 + 6 + 24)
-             = 20/80 = 0.25
-        PEI = 1 - 0.25 = 0.75 (higher is more equitable)
+        3. Compute PEI as 1 - |Gini| (higher is more equitable)
         
         Args:
             df (pd.DataFrame): DataFrame containing message data with columns:
@@ -237,6 +230,15 @@ class ReportMetrics:
                     sorted_counts = sorted(channel_counts)
                     n = len(sorted_counts)
                     total_sum = sum(sorted_counts)
+                    
+                    # Skip PEI calculation if channel has too few messages
+                    if total_sum < MIN_MESSAGES_FOR_PEI:
+                        logger.info(
+                            f"Channel {channel_name} has only {total_sum} messages, "
+                            "skipping PEI calculation"
+                        )
+                        metrics[channel_name]['participation_equity_index'] = pd.NA
+                        continue
                     
                     if total_sum == 0:
                         # All users have zero messages
