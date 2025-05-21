@@ -119,6 +119,17 @@ class MessageRetriever:
             # Convert timestamp to datetime
             if not df.empty:
                 df["ts"] = pd.to_datetime(df["ts"].astype(float), unit="s")
+                
+                # Deduplicate: Thread broadcasts appear twice:
+                # in channel messages and in thread replies
+                df = df.drop_duplicates(
+                    subset=["channel_id", "ts", "user_id", "message"],
+                    keep="first"
+                )
+                
+                logger.info(
+                    f"Deduplicated messages. Final count: {len(df)} messages"
+                )
 
             return df
 
