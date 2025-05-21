@@ -38,8 +38,13 @@ class MessageRetriever:
                 - channel_name: Name of the channel
                 - ts: Timestamp of the message
                 - message: Text content of the message
-                - type: Type of the message
-                - subtype: Subtype of the message
+                - type: Type of the message (e.g., "message")
+                - subtype: Subtype of the message (e.g., "thread_broadcast", "channel_join")
+                - is_thread: Boolean indicating if message is part of a thread
+                - is_parent: Boolean indicating if message is a thread parent (True),
+                    thread reply (False), or unthreaded message (None)
+                - user_id: ID of the user who sent the message
+                - thread_ts: Timestamp of the parent message (only for thread replies)
         """
         try:
             # Get list of channels to process
@@ -60,7 +65,7 @@ class MessageRetriever:
                         continue
 
                     # Fetch messages from this channel
-                    messages = self._fetch_channel_history(channel_id, days)
+                    messages = self._get_channel_history(channel_id, days)
 
                     # Process messages
                     for message in messages:
@@ -79,7 +84,7 @@ class MessageRetriever:
 
                         # Process thread replies if any
                         if message.get("thread_ts") and message.get("reply_count", 0) > 0:
-                            thread_messages = self._process_thread_replies(
+                            thread_messages = self._get_thread_replies(
                                 channel_id, 
                                 message["thread_ts"],
                                 channel_info["name"]
@@ -145,7 +150,7 @@ class MessageRetriever:
             return None
 
 
-    def _fetch_channel_history(
+    def _get_channel_history(
         self, 
         channel_id: str, 
         days: int
@@ -227,7 +232,7 @@ class MessageRetriever:
             )
             return [] 
 
-    def _process_thread_replies(
+    def _get_thread_replies(
         self, 
         channel_id: str, 
         thread_ts: str,
