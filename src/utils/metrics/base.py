@@ -8,7 +8,11 @@ class Metric(BaseModel):
     """Names of all available metrics."""
     PEI: str = Field(
         default="participation_equity_index",
-        description="Participation Equity Index metric name"
+        description="Balance of participation in discussions within a group"
+    )
+    DCR: str = Field(
+        default="decision_closure_rate",
+        description="Rate at which decisions are finalized and implemented within a group"
     )
 
 
@@ -22,7 +26,7 @@ class MetricModel(BaseModel):
       {'channel1': {'subtype1': {'metric1': 10, 'metric2': 20}}}
     """
     
-    name: str = Field(..., description="Name of the metric")
+    name: str
     
     def compute(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Compute the metric for all channels.
