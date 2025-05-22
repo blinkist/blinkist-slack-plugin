@@ -2,11 +2,32 @@ from slack_sdk.errors import SlackApiError
 from utils.skill_model import SkillModel
 import logging
 import datetime
+import json
+import os
+import random
 
 class SkillAssessmentHandler:
     def __init__(self, app):
         self.app = app
         self.skill_model = SkillModel()
+        self.user_quiz_data = {}  # Store quiz state for users
+        
+        # Load quiz questions
+        quiz_path = os.path.join(os.path.dirname(__file__), "../data/quiz_data_long.json")
+        try:
+            with open(quiz_path, "r") as f:
+                self.quiz_data = json.load(f)
+        except FileNotFoundError:
+            # Create a basic quiz data structure if file not found
+            self.quiz_data = {"questions": []}
+            print(f"Warning: Quiz data file not found at {quiz_path}")
+        
+        # Register action handlers for quiz buttons
+        for i in range(1, 6):  # For answer values 1-5
+            for j in range(10):  # For up to 10 questions
+                app.action(f"quiz_answer_{i}_{j}")(self.handle_quiz_answer)
+        
+        app.action("start_quiz")(self.start_quiz)
 
     def open_channel_select_modal(self, body, client, logger):
         user_id = body["user_id"]
@@ -184,17 +205,248 @@ class SkillAssessmentHandler:
             if not has_skills:
                 summary += "\n_Not enough data was found to confidently assess your skills. Try selecting more channels or continuing to engage in conversations._\n"
             
-            # Add a note about skills with score 0
+            # Add a note about skills with score 0 and offer a quiz
             if score_groups[0]:
+                # Store the unassessed skills for this user
+                self.user_quiz_data[user_id] = {
+                    "unassessed_skills": score_groups[0],
+                    "current_question": 0,
+                    "answers": {},
+                    "questions": []
+                }
+                
                 summary += "\n*Skills with insufficient evidence:*\n"
                 summary += ", ".join([f"_{skill}_" for skill in sorted(score_groups[0])]) + "\n"
-                summary += "_These skills couldn't be assessed from your messages. This doesn't mean you lack these skills - they may just not be evident in your Slack communications._\n"
-            
-            client.chat_postMessage(
-                channel=user_id,
-                text=summary
-            )
+                summary += "_These skills couldn't be assessed from your messages. This doesn't mean you lack these skills - they may just not be evident in your Slack communications._\n\n"
+                
+                # Add a button to start the quiz
+                client.chat_postMessage(
+                    channel=user_id,
+                    text=summary,
+                    blocks=[
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": summary}
+                        },
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": "Would you like to take a short quiz to assess these skills?"},
+                            "accessory": {
+                                "type": "button",
+                                "text": {"type": "plain_text", "text": "Start Quiz"},
+                                "action_id": "start_quiz",
+                                "style": "primary"
+                            }
+                        }
+                    ]
+                )
+            else:
+                client.chat_postMessage(
+                    channel=user_id,
+                    text=summary
+                )
         except SlackApiError as e:
             logger.error(f"Error sending skill assessment results to user: {e}")
+
+    def start_quiz(self, ack, body, client, logger):
+        """Start the quiz for unassessed skills"""
+        ack()
+        user_id = body["user"]["id"]
+        
+        if user_id not in self.user_quiz_data:
+            client.chat_postMessage(
+                channel=user_id,
+                text="Sorry, I don't have any quiz data for you. Please run the skill assessment first."
+            )
+            return
+        
+        # Get unassessed skills for this user
+        unassessed_skills = self.user_quiz_data[user_id]["unassessed_skills"]
+        
+        # Find questions related to these skills
+        relevant_questions = []
+        for question in self.quiz_data["questions"]:
+            if any(skill in unassessed_skills for skill in question["skills"]):
+                relevant_questions.append(question)
+        
+        # If no relevant questions, inform the user
+        if not relevant_questions:
+            client.chat_postMessage(
+                channel=user_id,
+                text="Sorry, I don't have any quiz questions for your unassessed skills."
+            )
+            return
+        
+        # Select up to 5 random questions
+        selected_questions = random.sample(relevant_questions, min(5, len(relevant_questions)))
+        self.user_quiz_data[user_id]["questions"] = selected_questions
+        
+        # Send the first question
+        self._send_quiz_question(user_id, 0, client, logger)
+
+    def _send_quiz_question(self, user_id, question_index, client, logger):
+        """Send a quiz question to the user"""
+        if user_id not in self.user_quiz_data:
+            return
+        
+        quiz_data = self.user_quiz_data[user_id]
+        questions = quiz_data["questions"]
+        
+        if question_index >= len(questions):
+            # Quiz is complete, show results
+            self._show_quiz_results(user_id, client, logger)
+            return
+        
+        question = questions[question_index]
+        quiz_data["current_question"] = question_index
+        
+        # Create the question message with buttons
+        client.chat_postMessage(
+            channel=user_id,
+            text=f"Question {question_index + 1} of {len(questions)}",
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Question {question_index + 1} of {len(questions)}*\n\n{question['text']}"}
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Strongly Disagree"},
+                            "value": "1",
+                            "action_id": f"quiz_answer_1_{question_index}"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Disagree"},
+                            "value": "2",
+                            "action_id": f"quiz_answer_2_{question_index}"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Neutral"},
+                            "value": "3",
+                            "action_id": f"quiz_answer_3_{question_index}"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Agree"},
+                            "value": "4",
+                            "action_id": f"quiz_answer_4_{question_index}"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Strongly Agree"},
+                            "value": "5",
+                            "action_id": f"quiz_answer_5_{question_index}"
+                        }
+                    ]
+                }
+            ]
+        )
+
+    def handle_quiz_answer(self, ack, body, client, logger):
+        """Handle a quiz answer from the user"""
+        ack()
+        user_id = body["user"]["id"]
+        action_id = body["actions"][0]["action_id"]
+        answer_value = int(body["actions"][0]["value"])
+        
+        logger.info(f"Received quiz answer: {action_id} with value {answer_value} from user {user_id}")
+        
+        if user_id not in self.user_quiz_data:
+            logger.warning(f"No quiz data found for user {user_id}")
+            client.chat_postMessage(
+                channel=user_id,
+                text="Sorry, I couldn't find your quiz session. Please try starting the assessment again."
+            )
+            return
+        
+        quiz_data = self.user_quiz_data[user_id]
+        current_question = quiz_data["current_question"]
+        
+        if current_question >= len(quiz_data["questions"]):
+            logger.warning(f"Invalid question index {current_question} for user {user_id}")
+            self._show_quiz_results(user_id, client, logger)
+            return
+        
+        question = quiz_data["questions"][current_question]
+        
+        # Store the answer
+        quiz_data["answers"][current_question] = {
+            "question": question["text"],
+            "skills": question["skills"],
+            "answer": answer_value
+        }
+        
+        logger.info(f"Stored answer for question {current_question} from user {user_id}")
+        
+        # Move to the next question
+        self._send_quiz_question(user_id, current_question + 1, client, logger)
+
+    def _show_quiz_results(self, user_id, client, logger):
+        """Show the quiz results to the user"""
+        if user_id not in self.user_quiz_data:
+            return
+        
+        quiz_data = self.user_quiz_data[user_id]
+        answers = quiz_data["answers"]
+        
+        # Calculate scores for each skill
+        skill_scores = {}
+        skill_counts = {}
+        
+        for q_idx, answer_data in answers.items():
+            answer_value = answer_data["answer"]
+            for skill in answer_data["skills"]:
+                if skill not in skill_scores:
+                    skill_scores[skill] = 0
+                    skill_counts[skill] = 0
+                
+                skill_scores[skill] += answer_value
+                skill_counts[skill] += 1
+        
+        # Calculate average scores
+        avg_scores = {}
+        for skill, total in skill_scores.items():
+            count = skill_counts[skill]
+            if count > 0:
+                avg_scores[skill] = round(total / count, 1)
+        
+        # Format the results
+        result_text = "*Your Self-Assessment Quiz Results:*\n\n"
+        result_text += "_Based on your responses to the quiz questions._\n\n"
+        
+        for skill, score in sorted(avg_scores.items(), key=lambda x: x[1], reverse=True):
+            # Convert 1-5 scale to descriptive text
+            if score >= 4.5:
+                level = "Very Strong"
+                emoji = "🌟"
+            elif score >= 3.5:
+                level = "Strong"
+                emoji = "✨"
+            elif score >= 2.5:
+                level = "Moderate"
+                emoji = "👍"
+            elif score >= 1.5:
+                level = "Developing"
+                emoji = "🔍"
+            else:
+                level = "Emerging"
+                emoji = "🌱"
+            
+            result_text += f"{emoji} *{skill}*: {score}/5 - {level}\n"
+        
+        result_text += "\n_This self-assessment complements your message-based skill assessment. Remember that self-perception and actual demonstration of skills can differ._"
+        
+        client.chat_postMessage(
+            channel=user_id,
+            text=result_text
+        )
+        
+        # Clear the quiz data for this user
+        del self.user_quiz_data[user_id]
 
 # ... (add more methods as you build out the feature) ... 
