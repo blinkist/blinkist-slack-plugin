@@ -19,7 +19,17 @@ class SkillModel:
         if not openai_api_key:
             self.logger.error("OpenAI API key not found in environment variables")
             raise ValueError("OpenAI API key not found in environment variables")
-        self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Initialize OpenAI client with minimal arguments
+        try:
+            self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        except TypeError as e:
+            self.logger.warning(f"Error initializing OpenAI client with default arguments: {e}")
+            # Try alternative initialization without proxies
+            self.openai_client = openai.OpenAI(
+                api_key=openai_api_key,
+                http_client=None  # Let OpenAI create its own client
+            )
 
     def assess_skills(self, messages):
         # Prepare the text corpus from user messages
