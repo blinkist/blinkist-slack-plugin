@@ -1,5 +1,9 @@
 .env
 config/
 
-src/utils/__pycache__/
-src/handlers/__pycache__/
+# Python cache files
+src/**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
