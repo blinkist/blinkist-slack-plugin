@@ -2,6 +2,7 @@ import json
 import os
 import openai
 import logging
+import random
 
 class SkillModel:
     def __init__(self):
@@ -27,14 +28,26 @@ class SkillModel:
             self.logger.warning("No message texts found in the provided messages")
             return {skill: 0 for skill in self.skill_descriptions.keys()}
 
+        # Store a few example messages for each skill assessment
+        message_examples = random.sample(user_texts, min(5, len(user_texts)))
+        self.message_examples = message_examples
+
         # Compose the system prompt
         skills_list = "\n".join([f"- {skill}: {desc}" for skill, desc in self.skill_descriptions.items()])
         system_prompt = (
             "You are an expert in workplace soft skills assessment. "
-            "Given a user's Slack messages, analyze and score the user on each of the following 20 soft skills "
-            "from 0 (no evidence) to 5 (excellent evidence). "
-            "Base your scores only on the provided messages. "
-            "Return your answer as a JSON object mapping each skill to a score (0-5), no extra text.\n\n"
+            "Given a user's Slack messages, analyze and score the user on each of the following soft skills "
+            "from 1 (limited evidence) to 5 (exceptional evidence). "
+            "IMPORTANT: Only assign a score when there is sufficient evidence in the messages. "
+            "If there's insufficient evidence for a skill, assign it a score of 0 (not assessable). "
+            "For each skill with a score above 0, include: "
+            "1) A brief explanation of why you assigned that score "
+            "2) Your confidence level (high/medium/low) "
+            "3) A specific example from their messages that demonstrates this skill "
+            "Return your answer as a JSON object with this structure: "
+            "{ \"skills\": { \"SkillName\": { \"score\": number, \"confidence\": \"high|medium|low\", "
+            "\"explanation\": \"text\", \"example\": \"specific message example\" } } }"
+            "\n\n"
             "Skills:\n"
             f"{skills_list}\n"
         )
@@ -58,7 +71,7 @@ class SkillModel:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.2,
-                max_tokens=600,
+                max_tokens=2000,
                 response_format={"type": "json_object"}  # Ensure JSON response
             )
             content = response.choices[0].message.content.strip()
@@ -66,26 +79,34 @@ class SkillModel:
             
             # Parse the JSON result
             try:
-                scores = json.loads(content)
+                result_data = json.loads(content)
                 self.logger.info("Successfully parsed JSON response")
+                
+                # Extract skills data
+                skills_data = result_data.get("skills", {})
+                
+                # Convert to simple score dictionary for backward compatibility
+                scores = {}
+                for skill in self.skill_descriptions.keys():
+                    skill_info = skills_data.get(skill, {})
+                    score = skill_info.get("score", 0)
+                    try:
+                        score = int(score)
+                    except Exception:
+                        score = 0
+                    scores[skill] = max(0, min(5, score))
+                
+                # Store the full data for detailed reporting
+                self.last_assessment_details = skills_data
+                
+                self.logger.info(f"Completed skill assessment with scores: {scores}")
+                return scores
+                
             except json.JSONDecodeError as e:
                 self.logger.error(f"Failed to parse JSON response: {e}")
                 self.logger.error(f"Raw response: {content}")
                 return {skill: 0 for skill in self.skill_descriptions.keys()}
             
-            # Ensure all skills are present and valid
-            result = {}
-            for skill in self.skill_descriptions.keys():
-                val = scores.get(skill, 0)
-                try:
-                    val = int(val)
-                except Exception:
-                    self.logger.warning(f"Invalid score for skill {skill}: {val}")
-                    val = 0
-                result[skill] = max(0, min(5, val))
-            
-            self.logger.info(f"Completed skill assessment with scores: {result}")
-            return result
         except Exception as e:
             # On error, return zeros for all skills
             self.logger.error(f"Error in LLM skill assessment: {e}")
