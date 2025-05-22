@@ -3,7 +3,6 @@ import logging
 import pandas as pd
 from typing import Dict
 from .base import MetricModel, Metric
-from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +16,12 @@ METRIC = Metric()
 class ParticipationEquityIndex(MetricModel):
     """Class to compute Participation Equity Index (PEI) for Slack channels.
     
-    The PEI is calculated using the Gini coefficient to measure message distribution
-    equity among users in a channel. A higher PEI indicates more equitable
-    participation.
+    The PEI measures how evenly participation is distributed among channel members.
+    It is calculated using the Gini coefficient of message counts per user.
+    A PEI of 1.0 indicates perfect equity, while 0.0 indicates complete inequality.
     """
     
-    name: str = Field(
-        default=METRIC.PEI,
-        description="Balance of participation in discussions within a group"
-    )
+    name = METRIC.PEI
 
     def compute(self, df: pd.DataFrame) -> Dict[str, float]:
         """Compute Participation Equity Index (PEI) for all channels using Gini coefficient.
