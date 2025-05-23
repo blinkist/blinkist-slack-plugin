@@ -1,31 +1,26 @@
 """Base class for channel metrics."""
 from typing import Dict, Any
 import pandas as pd
-from pydantic import BaseModel, Field
+from enum import Enum
 
 
-class Metric(BaseModel):
+class Metric(str, Enum):
     """Names of all available metrics."""
-    PEI: str = Field(
-        default="participation_equity_index",
-        description="Balance of participation in discussions within a group"
-    )
-    DCR: str = Field(
-        default="decision_closure_rate",
-        description="Rate at which decisions are finalized and implemented within a group"
-    )
+    PEI = "participation_equity_index"
+    DCR = "decision_closure_rate"
 
 
-class MetricModel(BaseModel):
+class MetricModel:
     """Base class for channel metrics.
     
-    All metric classes should inherit from this class and implement the compute method.
+    Subclasses must define a class variable:
+        name: str
+    and implement the compute method.
     The compute method can return different dictionary structures depending on the metric:
     - Simple metrics: Dict[str, float] - e.g., {'channel1': 0.8, 'channel2': 0.6}
     - Structured metrics: Dict[str, Dict[str, Any]] - e.g., 
       {'channel1': {'subtype1': {'metric1': 10, 'metric2': 20}}}
     """
-    
     name: str
     
     def compute(self, df: pd.DataFrame) -> Dict[str, Any]:
