@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 MIN_THREAD_PARTICIPANTS = 2
 # Minimum number of initiated decisions required for DCR calculation
 MIN_INITIATED_DECISIONS = 3
+# Minimum confidence threshold for including a thread in DCR calculation
+MIN_CONFIDENCE_THRESHOLD = 0.5
 
 
 class DecisionClosureRate(MetricModel):
@@ -131,7 +133,11 @@ class DecisionClosureRate(MetricModel):
             # Calculate DCR for each channel
             channel_metrics = {}
             for channel_name in analysis_df['channel_name'].unique():
-                channel_data = analysis_df[analysis_df['channel_name'] == channel_name]
+                # Filter for high confidence analyses
+                channel_data = analysis_df[
+                    (analysis_df['channel_name'] == channel_name) & 
+                    (analysis_df['confidence'] >= MIN_CONFIDENCE_THRESHOLD)
+                ]
                 
                 # Count initiated and closed decisions
                 initiated_decisions = channel_data['decision_initiation'].sum()
