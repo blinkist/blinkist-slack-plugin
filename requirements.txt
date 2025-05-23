@@ -5,4 +5,5 @@ python-dotenv>=1.0.0
 schedule>=1.2.0
 nltk>=3.8.1
 pytz>=2024.1
-pydantic>=2.6.1 
+pydantic>=2.6.1
+openai>=1.12.0 
