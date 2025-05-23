@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Minimum number of participants required in a thread
 MIN_THREAD_PARTICIPANTS = 2
 # Minimum number of initiated decisions required for DCR calculation
-MIN_INITIATED_DECISIONS = 1
+MIN_INITIATED_DECISIONS = 3
 
 
 class DecisionClosureRate(MetricModel):
