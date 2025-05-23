@@ -1,5 +1,11 @@
-"""Channel metrics package."""
-from .base import Metric
+"""Metrics module initialization."""
+from .base import Metric, MetricModel
 from .pei import ParticipationEquityIndex
+from .dcr import DecisionClosureRate
 
-__all__ = ['Metric', 'ParticipationEquityIndex'] 
+__all__ = [
+    'Metric',
+    'MetricModel',
+    'ParticipationEquityIndex',
+    'DecisionClosureRate'
+] 
