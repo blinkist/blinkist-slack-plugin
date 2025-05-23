@@ -141,7 +141,7 @@ class ReportMetrics:
             client.chat_postMessage(
                 channel=user,
                 text=":loading: *Processing the channels report...*\n"
-                     "I'll message you when it's ready."
+                     "This can take a few minutes. I'll message you when it's ready."
             )
         except SlackApiError as e:
             logger.error(f"Error sending acknowledgment message: {e}")
@@ -195,9 +195,6 @@ class ReportMetrics:
                 for channel_name in df['channel_name'].unique()
             }
             
-            # Add message counts to metrics
-            self._compute_message_counts(df, metrics)
-            
             # Compute all metrics
             metrics = self._compute_metrics(df, metrics)
             
@@ -235,34 +232,6 @@ class ReportMetrics:
             logger.error(f"Error processing channel data: {str(e)}")
             return pd.DataFrame()
         
-    def _compute_message_counts(
-        self, 
-        df: pd.DataFrame,
-        metrics: Dict[str, Dict[str, Dict[str, int]]]
-    ) -> None:
-        """Compute message counts by subtype for each channel.
-        
-        Args:
-            df (pd.DataFrame): DataFrame containing message data
-            metrics (Dict[str, Dict[str, Dict[str, int]]]): Dictionary to update with message counts
-        """
-        try:
-            # Group by channel and subtype, then count messages
-            counts = df.groupby(['channel_name', 'subtype']).size().reset_index(name='count')
-            
-            # Add message counts to metrics dictionary
-            for _, row in counts.iterrows():
-                channel_name = row['channel_name']
-                subtype = row['subtype']
-                count = row['count']
-                
-                if 'message_counts' not in metrics[channel_name]:
-                    metrics[channel_name]['message_counts'] = {}
-                metrics[channel_name]['message_counts'][subtype] = count
-                
-        except Exception as e:
-            logger.error(f"Error computing message counts: {str(e)}")
-
     def _compute_metrics(
         self, 
         df: pd.DataFrame,
@@ -318,6 +287,34 @@ class ReportMetrics:
             },
             {
                 "type": "divider"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Participation Equity Index (PEI)*\n"
+                            "Measures how balanced participation is within a team.\n\n"
+                            "🟢 *Good PEI (≥ 0.75)*: Balanced participation, collaborative environment\n"
+                            "🟠 *Moderate PEI (0.5–0.75)*: Some imbalance, may be acceptable depending on context\n"
+                            "🔴 *Low PEI (< 0.5)*: Significant imbalance, potential team dynamics issues"
+                }
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Decision Closure Rate (DCR)*\n"
+                            "Measures how effectively a team moves from initiating decisions to finalizing them.\n\n"
+                            "🟢 *Good DCR (≥ 80%)*: Effective decision-making, strong alignment\n"
+                            "🟠 *Moderate DCR (50%–80%)*: Some delays, may be acceptable in iterative environments\n"
+                            "🔴 *Low DCR (< 50%)*: Significant inefficiencies, potential decision paralysis"
+                }
+            },
+            {
+                "type": "divider"
             }
         ]
         
@@ -334,40 +331,42 @@ class ReportMetrics:
             # Add PEI if available
             if Metric.PEI in channel_metrics:
                 pei = channel_metrics[Metric.PEI]
+                # Add appropriate emoji based on PEI value
+                pei_emoji = "🟢" if pei >= 0.75 else "🟠" if pei >= 0.5 else "🔴"
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"• Participation Equity Index: {pei:.2f}"
+                        "text": f"• Participation Equity Index: {pei_emoji} {pei:.2f}"
+                    }
+                })
+            else:
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "• Participation Equity Index: Not enough data available"
                     }
                 })
             
             # Add DCR if available
             if Metric.DCR in channel_metrics:
                 dcr = channel_metrics[Metric.DCR]
+                # Add appropriate emoji based on DCR value
+                dcr_emoji = "🟢" if dcr >= 80 else "🟠" if dcr >= 50 else "🔴"
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"• Decision Closure Rate: {dcr:.2f}%"
+                        "text": f"• Decision Closure Rate: {dcr_emoji} {dcr:.2f}%"
                     }
                 })
-            
-            # Sort message counts by count (descending)
-            sorted_counts = sorted(
-                channel_metrics['message_counts'].items(),
-                key=lambda x: x[1],
-                reverse=True
-            )
-            
-            # Add message counts
-            for subtype, count in sorted_counts:
-                display_subtype = subtype.replace('_', ' ').title()
+            else:
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"• {display_subtype}: {count}"
+                        "text": "• Decision Closure Rate: Not enough data available"
                     }
                 })
             
@@ -376,6 +375,6 @@ class ReportMetrics:
         
         return {
             "blocks": blocks,
-            "response_type": "ephemeral"
+            "response_type": "in_channel"
         }
  
