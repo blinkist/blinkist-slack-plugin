@@ -9,9 +9,6 @@ logger = logging.getLogger(__name__)
 # Minimum number of messages required in a channel to compute PEI
 MIN_MESSAGES_FOR_PEI = 10
 
-# Initialize metric names
-METRIC = Metric()
-
 
 class ParticipationEquityIndex(MetricModel):
     """Class to compute Participation Equity Index (PEI) for Slack channels.
@@ -21,7 +18,7 @@ class ParticipationEquityIndex(MetricModel):
     A PEI of 1.0 indicates perfect equity, while 0.0 indicates complete inequality.
     """
     
-    name = METRIC.PEI
+    name = Metric.PEI.value
 
     def compute(self, df: pd.DataFrame) -> Dict[str, float]:
         """Compute Participation Equity Index (PEI) for all channels using Gini coefficient.
