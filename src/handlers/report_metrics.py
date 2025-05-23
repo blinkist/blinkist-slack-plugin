@@ -1,8 +1,10 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import logging
 import pandas as pd
+from datetime import datetime, timedelta
+from slack_sdk.errors import SlackApiError
 from utils.message_retriever import MessageRetriever
-from utils.metrics import ParticipationEquityIndex, Metric
+from utils.metrics import ParticipationEquityIndex, DecisionClosureRate, Metric
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +23,158 @@ class ReportMetrics:
         self.channel_tracker = channel_tracker
         self.channels_data = []
         # Initialize metric models
-        self.metric_models = [ParticipationEquityIndex()]
-        # Initialize metric names
-        self.metrics = Metric()
+        self.metric_models = [
+            ParticipationEquityIndex(),
+            DecisionClosureRate()
+        ]
 
-    def generate_report(self, days: int = 30) -> str:
-        """Generate a complete report of channel metrics.
+    def open_channel_select_modal(self, body, client, logger, days: int = 30):
+        """Open a modal for channel selection.
+        
+        Args:
+            body: The request body from Slack
+            client: The Slack client instance
+            logger: Logger instance
+            days: Number of days to look back (default: 30)
+        """
+        try:
+            # Acknowledge the command immediately
+            trigger_id = body["trigger_id"]
+            
+            # Get list of channels where bot is installed
+            installed_channels = self.channel_tracker.get_installed_channels()
+            
+            # Fetch channel info for installed channels
+            valid_channels = []
+            for channel_id in installed_channels:
+                try:
+                    channel_info = client.conversations_info(channel=channel_id)
+                    if channel_info["ok"]:
+                        channel = channel_info["channel"]
+                        valid_channels.append({
+                            "id": channel["id"],
+                            "name": channel["name"]
+                        })
+                except SlackApiError as e:
+                    logger.error(f"Error fetching info for channel {channel_id}: {e}")
+            
+            # Create options from valid channels
+            options = [
+                {
+                    "text": {"type": "plain_text", "text": "All Channels"},
+                    "value": "all"
+                }
+            ]
+            # Add individual channel options
+            options.extend([
+                {
+                    "text": {"type": "plain_text", "text": ch["name"]},
+                    "value": ch["id"]
+                }
+                for ch in valid_channels
+            ])
+            
+            # Open modal with channel selection
+            client.views_open(
+                trigger_id=trigger_id,
+                view={
+                    "type": "modal",
+                    "callback_id": "pulse_report_channel_select",
+                    "private_metadata": str(days),  # Store days in private metadata
+                    "title": {"type": "plain_text", "text": "Channel Pulse Report"},
+                    "submit": {"type": "plain_text", "text": "Generate Report"},
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"Select channels to analyze from the last {days} days:"
+                            }
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "channels_block",
+                            "element": {
+                                "type": "multi_static_select",
+                                "action_id": "channels_select",
+                                "placeholder": {
+                                    "type": "plain_text",
+                                    "text": "Select channels"
+                                },
+                                "options": options
+                            },
+                            "label": {
+                                "type": "plain_text",
+                                "text": "Choose channels to analyze"
+                            }
+                        }
+                    ]
+                }
+            )
+            
+        except SlackApiError as e:
+            logger.error(f"Error opening channel select modal: {e}")
+
+    def handle_channel_select_submission(self, view, user, client, logger, days: int = 30):
+        """Handle the channel selection submission.
+        
+        Args:
+            view: The view submission data
+            user: The user ID who submitted the form
+            client: The Slack client instance
+            logger: Logger instance
+            days: Number of days to look back (default: 30)
+        """
+        # Extract selected channel IDs from the modal submission
+        selected_channels = view["state"]["values"]["channels_block"]["channels_select"]["selected_options"]
+        
+        # Check if "All Channels" was selected
+        if any(ch["value"] == "all" for ch in selected_channels):
+            channel_ids = None  # None means all channels
+            logger.info(f"User {user} selected all channels")
+        else:
+            channel_ids = [ch["value"] for ch in selected_channels]
+            logger.info(f"User {user} selected channels: {channel_ids}")
+
+        # Send acknowledgment message
+        try:
+            client.chat_postMessage(
+                channel=user,
+                text=":loading: *Processing the channels report...*\n"
+                     "I'll message you when it's ready."
+            )
+        except SlackApiError as e:
+            logger.error(f"Error sending acknowledgment message: {e}")
+
+        try:
+            # Generate report for selected channels
+            report = self.generate_slack_report(days=days, channel_id_list=channel_ids)
+            
+            # Send report to user
+            client.chat_postMessage(
+                channel=user,
+                blocks=report["blocks"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generating report: {e}")
+            try:
+                client.chat_postMessage(
+                    channel=user,
+                    text="⚠️ *Error generating report*\n"
+                         "Sorry, there was an error generating the report. "
+                         "Please try again later."
+                )
+            except SlackApiError as e:
+                logger.error(f"Error sending error notification: {e}")
+
+    def generate_slack_report(self, days: int = 30, channel_id_list: List[str] = None) -> str:
+        """Generate a complete report of channel metrics for Slack.
         
         Args:
             days (int, optional): Number of days to look back. Defaults to 30.
+            channel_id_list (List[str], optional): List of channel IDs to analyze.
+                If None, analyzes all installed channels.
             
         Returns:
             str: Formatted report message for Slack
@@ -38,7 +183,7 @@ class ReportMetrics:
 
         try:
             # Get the raw message data
-            df = self._process_channel_data()
+            df = self._process_channel_data(channel_id_list)
 
             if df.empty:
                 logger.info("No messages found in the specified time period")
@@ -67,83 +212,12 @@ class ReportMetrics:
             logger.error(f"Error generating report: {str(e)}")
             return "Sorry, there was an error generating the report"
 
-    def _format_slack_message(
-        self, 
-        metrics: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Format the metrics into a Slack message using Block Kit.
+    def _process_channel_data(self, channel_id_list: List[str] = None) -> pd.DataFrame:
+        """Process all public channel message data and create a DataFrame.
         
         Args:
-            metrics (Dict[str, Dict[str, Any]]): Dictionary mapping channel names to
-                their metrics including message counts and participation equity index
-            
-        Returns:
-            Dict[str, Any]: Slack message JSON payload with blocks
-        """
-        # Initialize blocks list
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": f"📊 Channel Pulse Report (Last {self.days} days)",
-                    "emoji": True
-                }
-            },
-            {
-                "type": "divider"
-            }
-        ]
-        
-        for channel_name, channel_metrics in metrics.items():
-            # Add channel header
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*#{channel_name}*"
-                }
-            })
-            
-            # Add PEI if available
-            if self.metrics.PEI in channel_metrics:
-                pei = channel_metrics[self.metrics.PEI]
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"• Participation Equity Index: {pei:.2f}"
-                    }
-                })
-            
-            # Sort message counts by count (descending)
-            sorted_counts = sorted(
-                channel_metrics['message_counts'].items(),
-                key=lambda x: x[1],
-                reverse=True
-            )
-            
-            # Add message counts
-            for subtype, count in sorted_counts:
-                display_subtype = subtype.replace('_', ' ').title()
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"• {display_subtype}: {count}"
-                    }
-                })
-            
-            # Add divider between channels
-            blocks.append({"type": "divider"})
-        
-        return {
-            "blocks": blocks,
-            "response_type": "ephemeral"
-        }
-
-    def _process_channel_data(self) -> pd.DataFrame:
-        """Process all public channel message data and create a DataFrame.
+            channel_id_list (List[str], optional): List of channel IDs to process.
+                If None, processes all installed channels.
         
         Returns:
             pd.DataFrame: DataFrame containing channel_id, channel_name, timestamp,
@@ -152,7 +226,10 @@ class ReportMetrics:
         try:
             # Use MessageRetriever to get messages
             message_retriever = MessageRetriever(self.app, self.channel_tracker)
-            return message_retriever.get_channel_messages(days=self.days)
+            return message_retriever.get_channel_messages(
+                days=self.days,
+                channel_id_list=channel_id_list
+            )
 
         except Exception as e:
             logger.error(f"Error processing channel data: {str(e)}")
@@ -215,4 +292,90 @@ class ReportMetrics:
         except Exception as e:
             logger.error(f"Error computing metrics: {str(e)}")
             return metrics
+
+    def _format_slack_message(
+        self, 
+        metrics: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Format the metrics into a Slack message using Block Kit.
+        
+        Args:
+            metrics (Dict[str, Dict[str, Any]]): Dictionary mapping channel names to
+                their metrics including message counts and participation equity index
+            
+        Returns:
+            Dict[str, Any]: Slack message JSON payload with blocks
+        """
+        # Initialize blocks list
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"📊 Channel Pulse Report (Last {self.days} days)",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "divider"
+            }
+        ]
+        
+        for channel_name, channel_metrics in metrics.items():
+            # Add channel header
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*#{channel_name}*"
+                }
+            })
+            
+            # Add PEI if available
+            if Metric.PEI in channel_metrics:
+                pei = channel_metrics[Metric.PEI]
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"• Participation Equity Index: {pei:.2f}"
+                    }
+                })
+            
+            # Add DCR if available
+            if Metric.DCR in channel_metrics:
+                dcr = channel_metrics[Metric.DCR]
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"• Decision Closure Rate: {dcr:.2f}%"
+                    }
+                })
+            
+            # Sort message counts by count (descending)
+            sorted_counts = sorted(
+                channel_metrics['message_counts'].items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            # Add message counts
+            for subtype, count in sorted_counts:
+                display_subtype = subtype.replace('_', ' ').title()
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"• {display_subtype}: {count}"
+                    }
+                })
+            
+            # Add divider between channels
+            blocks.append({"type": "divider"})
+        
+        return {
+            "blocks": blocks,
+            "response_type": "ephemeral"
+        }
  
