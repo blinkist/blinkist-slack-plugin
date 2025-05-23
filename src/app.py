@@ -1,23 +1,32 @@
-import sys
+"""Slack app initialization and command handlers."""
+import logging
 import os
 import schedule
-import time
+import sys
 import threading
-from dotenv import load_dotenv
+import time
+from pathlib import Path
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from dotenv import load_dotenv
+from slack_bolt import App
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
 
 # Load environment variables from env file
 load_dotenv('.env')
 
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
 from utils.channel_utils import ChannelTracker
 from handlers.quiet_channel import QuietChannelHandler
 from handlers.question_tracker import QuestionTracker
 from handlers.weekly_summary import WeeklySummary
 from handlers.command_handler import CommandHandler
 from handlers.report_metrics import ReportMetrics
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Initialize the Slack app
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
@@ -32,7 +41,8 @@ weekly_summary = WeeklySummary(app)
 command_handler = CommandHandler(app)
 report_metrics = ReportMetrics(app, channel_tracker)
 
-channel_tracker.update_installed_channels()  # TODO: remove this once scheduler works
+# TODO: remove this once scheduler works
+channel_tracker.update_installed_channels()
 
 # Register message events
 @app.message("")
@@ -59,8 +69,11 @@ def handle_mood_command(ack, command, respond):
     command_handler.analyze_channel_mood(command['channel_id'], respond)
 
 @app.command("/pulse-report")
-def pulse_report_command(ack, command, respond):
+def pulse_report_command(ack, body, client, logger):
     """Handle the /pulse-report command.
+    
+    Opens a modal for channel selection and then generates a report for the
+    selected channels.
     
     Args:
         days (optional): Number of days to look back (default: 30)
@@ -71,40 +84,91 @@ def pulse_report_command(ack, command, respond):
     try:
         # Get the number of days (default to 30 if not specified)
         days = 30
-        if command["text"].strip():
+        if body["text"].strip():
             try:
-                days = int(command["text"].strip())
+                days = int(body["text"].strip())
                 if days <= 0:
-                    respond("Please provide a positive number of days")
+                    client.chat_postMessage(
+                        channel=body["user_id"],
+                        text="Please provide a positive number of days"
+                    )
                     return
             except ValueError:
-                respond("Please provide a valid number of days")
+                client.chat_postMessage(
+                    channel=body["user_id"],
+                    text="Please provide a valid number of days"
+                )
                 return
         
-        # Generate and return the report
-        report = report_metrics.generate_report(days)
-        respond(report)
-        
+        # Open the channel selection modal with the specified days
+        report_metrics.open_channel_select_modal(body, client, logger, days)
     except Exception as e:
-        logger.error(f"Error generating report: {str(e)}")
-        respond("Sorry, there was an error generating the report")
+        logger.error(f"Error opening channel selection modal: {str(e)}")
+        client.chat_postMessage(
+            channel=body["user_id"],
+            text="Sorry, there was an error opening the channel selection. "
+                 "Please try again later."
+        )
+
+@app.view("pulse_report_channel_select")
+def handle_channel_select_submission(ack, body, client, logger):
+    """Handle the submission of the channel selection modal.
+    
+    Args:
+        ack: Function to acknowledge the view submission
+        body: The view submission data
+        client: The Slack client instance
+        logger: Logger instance
+    """
+    # Acknowledge the view submission
+    ack()
+    
+    try:
+        # Get the days from the private metadata
+        days = int(body["view"]["private_metadata"])
+        
+        # Handle the channel selection submission
+        report_metrics.handle_channel_select_submission(
+            body["view"],
+            body["user"]["id"],
+            client,
+            logger,
+            days
+        )
+    except Exception as e:
+        logger.error(f"Error handling channel selection submission: {str(e)}")
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text="Sorry, there was an error processing your selection. "
+                 "Please try again later."
+        )
 
 def run_scheduler():
+    """Run the scheduler for periodic tasks."""
     # Schedule channel tracker every morning
-    # schedule.every().day.at("08:00").do(channel_tracker.update_installed_channels)
-    schedule.every(5).minutes.do(channel_tracker.update_installed_channels)  # TODO: remove this
+    # schedule.every().day.at("08:00").do(
+    #     channel_tracker.update_installed_channels
+    # )
+    schedule.every(5).minutes.do(
+        channel_tracker.update_installed_channels
+    )  # TODO: remove this
 
     # Schedule question checks every minute
-    schedule.every(1).minutes.do(question_tracker.check_unanswered_questions)
+    schedule.every(1).minutes.do(
+        question_tracker.check_unanswered_questions
+    )
     
     # Schedule weekly summary
-    schedule.every().friday.at("16:00").do(weekly_summary.generate_and_post_summary)
+    schedule.every().friday.at("16:00").do(
+        weekly_summary.generate_and_post_summary
+    )
     
     while True:
         schedule.run_pending()
         time.sleep(60)
 
 def main():
+    """Start the Slack app and scheduler."""
     # Start the scheduler in a separate thread
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
