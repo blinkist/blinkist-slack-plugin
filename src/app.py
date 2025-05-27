@@ -12,6 +12,7 @@ from handlers.command_handler import CommandHandler
 import schedule
 import time
 import threading
+from handlers.daily_pulse import start_daily_pulse_scheduler
 
 # Initialize the Slack app
 app = App(token=Settings.SLACK_BOT_TOKEN)
@@ -68,4 +69,7 @@ def main():
     handler.start()
 
 if __name__ == "__main__":
-    main() 
+    # Start the daily Blinkist Pulse scheduler
+    start_daily_pulse_scheduler()
+    import asyncio
+    asyncio.get_event_loop().run_forever() 

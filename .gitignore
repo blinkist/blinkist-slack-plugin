@@ -3,3 +3,5 @@ config/
 
 src/utils/__pycache__/
 src/handlers/__pycache__/
+venv/lib/python3.12/site-packages/httpcore/_async/__pycache__/connection.cpython-312.pyc
+/venv
