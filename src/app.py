@@ -41,7 +41,7 @@ weekly_summary = WeeklySummary(app)
 command_handler = CommandHandler(app)
 report_metrics = ReportMetrics(app, channel_tracker)
 
-# TODO: remove this once scheduler works
+# First time update upon startup, then scheduler takes over
 channel_tracker.update_installed_channels()
 
 # Register message events
@@ -143,15 +143,15 @@ def handle_channel_select_submission(ack, body, client, logger):
                  "Please try again later."
         )
 
+# Register action handlers
+app.action("get_content_recommendations")(report_metrics.handle_content_recommendations)
+
 def run_scheduler():
     """Run the scheduler for periodic tasks."""
     # Schedule channel tracker every morning
-    # schedule.every().day.at("08:00").do(
-    #     channel_tracker.update_installed_channels
-    # )
-    schedule.every(5).minutes.do(
+    schedule.every().day.at("08:00").do(
         channel_tracker.update_installed_channels
-    )  # TODO: remove this
+    )
 
     # Schedule question checks every minute
     schedule.every(1).minutes.do(

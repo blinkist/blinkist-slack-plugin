@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from slack_sdk.errors import SlackApiError
 from utils.message_retriever import MessageRetriever
 from utils.metrics import ParticipationEquityIndex, DecisionClosureRate, Metric
+from utils.content_recommender import ContentRecommender
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,8 @@ class ReportMetrics:
             ParticipationEquityIndex(),
             DecisionClosureRate()
         ]
+        # Initialize content recommender
+        self.content_recommender = ContentRecommender()
 
     def open_channel_select_modal(self, body, client, logger, days: int = 30):
         """Open a modal for channel selection.
@@ -383,6 +387,26 @@ class ReportMetrics:
                                     "text": "*Areas for Improvement:*\n"
                                             f"{insights['decision_making_improvements']}"
                                 }
+                            },
+                            {
+                                "type": "actions",
+                                "elements": [
+                                    {
+                                        "type": "button",
+                                        "text": {
+                                            "type": "plain_text",
+                                            "text": "Get Content Recommendations",
+                                            "emoji": True
+                                        },
+                                        "style": "primary",
+                                        "value": json.dumps({
+                                            "channel_name": channel_name,
+                                            "strengths": insights['decision_making_strengths'],
+                                            "improvements": insights['decision_making_improvements']
+                                        }),
+                                        "action_id": "get_content_recommendations"
+                                    }
+                                ]
                             }
                         ])
             else:
@@ -401,4 +425,49 @@ class ReportMetrics:
             "blocks": blocks,
             "response_type": "in_channel"
         }
+
+    def handle_content_recommendations(self, body, client, logger):
+        """Handle the content recommendations button click.
+        
+        Args:
+            body: The request body from Slack
+            client: The Slack client instance
+            logger: Logger instance
+        """
+        try:
+            # Get the insights from the button value
+            button_data = json.loads(body["actions"][0]["value"])
+            channel_name = button_data["channel_name"]
+            strengths = button_data["strengths"]
+            improvements = button_data["improvements"]
+            
+            # Send immediate acknowledgment
+            client.chat_postMessage(
+                channel=body["channel"]["id"],
+                text=f":books: *Collecting content recommendations for #{channel_name}...*\n"
+                     "This may take a moment. I'll message you when it's ready."
+            )
+            
+            # Generate recommendations
+            recommendations = self.content_recommender.get_recommendations(
+                channel_name=channel_name,
+                strengths=strengths,
+                improvements=improvements
+            )
+            
+            # Send recommendations as a new message
+            client.chat_postMessage(
+                channel=body["channel"]["id"],
+                blocks=recommendations["blocks"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error handling content recommendations: {str(e)}")
+            try:
+                client.chat_postMessage(
+                    channel=body["channel"]["id"],
+                    text="Sorry, there was an error generating recommendations."
+                )
+            except SlackApiError as e:
+                logger.error(f"Error sending error notification: {e}")
  
