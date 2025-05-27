@@ -1,0 +1,120 @@
+{
+    "questions": [
+        {
+            "text": "I find it easy to explain my thoughts clearly in group discussions.",
+            "skills": ["Communication", "Teamwork"]
+        },
+        {
+            "text": "I adjust the way I explain things depending on who I'm speaking to.",
+            "skills": ["Communication", "Emotional Intelligence"]
+        },
+        {
+            "text": "I enjoy working with others to achieve shared goals.",
+            "skills": ["Teamwork", "Collaboration"]
+        },
+        {
+            "text": "I feel comfortable sharing my opinions, even when others disagree.",
+            "skills": ["Communication", "Leadership"]
+        },
+        {
+            "text": "I often take the lead when organizing group activities or tasks.",
+            "skills": ["Leadership", "Teamwork"]
+        },
+        {
+            "text": "I try to stay calm and find solutions when disagreements arise.",
+            "skills": ["Conflict Resolution", "Emotional Intelligence"]
+        },
+        {
+            "text": "I think about how my actions affect others before making decisions.",
+            "skills": ["Empathy", "Leadership"]
+        },
+        {
+            "text": "I quickly adapt when plans change unexpectedly.",
+            "skills": ["Adaptability", "Flexibility"]
+        },
+        {
+            "text": "I enjoy exploring new tools or methods to improve how I work.",
+            "skills": ["Adaptability", "Creativity"]
+        },
+        {
+            "text": "I break large problems into smaller steps to make them easier to handle.",
+            "skills": ["Problem-Solving", "Critical Thinking"]
+        },
+        {
+            "text": "I try to see challenges from different angles before deciding on a solution.",
+            "skills": ["Problem-Solving", "Creativity"]
+        },
+        {
+            "text": "I often find myself questioning whether something could be done better.",
+            "skills": ["Critical Thinking", "Creativity"]
+        },
+        {
+            "text": "I enjoy brainstorming ideas in group settings.",
+            "skills": ["Creativity", "Collaboration"]
+        },
+        {
+            "text": "I focus on keeping everyone calm and working together during conflicts.",
+            "skills": ["Conflict Resolution", "Leadership"]
+        },
+        {
+            "text": "I make an effort to really understand how others are feeling.",
+            "skills": ["Empathy", "Emotional Intelligence"]
+        },
+        {
+            "text": "I usually stay productive and focused, even when under pressure.",
+            "skills": ["Stress Management", "Time Management"]
+        },
+        {
+            "text": "I prioritize my tasks to make sure I meet deadlines.",
+            "skills": ["Time Management", "Work Ethic"]
+        },
+        {
+            "text": "I consider the consequences of my decisions before acting.",
+            "skills": ["Decision-Making", "Critical Thinking"]
+        },
+        {
+            "text": "I seek input from others when making decisions that affect the group.",
+            "skills": ["Collaboration", "Decision-Making"]
+        },
+        {
+            "text": "I actively listen to others without interrupting.",
+            "skills": ["Listening Skills", "Communication"]
+        },
+        {
+            "text": "I ask questions to clarify things I don't fully understand.",
+            "skills": ["Listening Skills", "Critical Thinking"]
+        },
+        {
+            "text": "I regularly make time to connect with people in my field.",
+            "skills": ["Networking", "Collaboration"]
+        },
+        {
+            "text": "I follow up with people I meet to maintain professional relationships.",
+            "skills": ["Networking", "Work Ethic"]
+        },
+        {
+            "text": "I set personal goals and track my progress toward achieving them.",
+            "skills": ["Self-Motivation", "Time Management"]
+        },
+        {
+            "text": "I stay focused on my tasks even when I'm working alone.",
+            "skills": ["Self-Motivation", "Work Ethic"]
+        },
+        {
+            "text": "I adapt my approach when I realize my current strategy isn't working.",
+            "skills": ["Flexibility", "Problem-Solving"]
+        },
+        {
+            "text": "I look for ways to support my teammates when they're struggling.",
+            "skills": ["Empathy", "Teamwork"]
+        },
+        {
+            "text": "I find myself encouraging others to stay motivated during tough times.",
+            "skills": ["Leadership", "Emotional Intelligence"]
+        },
+        {
+            "text": "I take responsibility for my decisions, even when things go wrong.",
+            "skills": ["Work Ethic", "Decision-Making"]
+        }
+    ]
+}
