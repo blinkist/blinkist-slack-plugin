@@ -63,11 +63,24 @@ class DecisionClosureRate(MetricModel):
             Dict[str, float]: Dictionary mapping channel names to their DCR 
             values
         """
-        try:
-            # Get valid threads with sufficient participation in one operation
+        try:         
+            # Check if DataFrame is empty
+            if df.empty:
+                logger.info("Input DataFrame is empty")
+                return {}
+            
+            # Check if required columns exist
+            required_columns = ['is_thread', 'channel_name', 'thread_id', 'user_id']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                logger.error(f"Missing required columns: {missing_columns}")
+                return {}
+            
+            # Filter for threads and group
+            thread_df = df[df['is_thread']]
+
             valid_threads = (
-                df[df['is_thread']]
-                .groupby(['channel_name', 'thread_id'])
+                thread_df.groupby(['channel_name', 'thread_id'])
                 .agg({'user_id': 'nunique'})
                 .query('user_id >= @MIN_THREAD_PARTICIPANTS')
             )
@@ -87,7 +100,7 @@ class DecisionClosureRate(MetricModel):
                 )
             ]
             
-            # Initialize DataFrame for analysis results
+            # Initialize DataFrame for analysis results with explicit dtypes
             analysis_df = pd.DataFrame(
                 columns=[
                     'channel_id',
@@ -95,58 +108,95 @@ class DecisionClosureRate(MetricModel):
                     'thread_id',
                     'decision_initiation',
                     'decision_closure',
-                    'confidence'
+                    'confidence',
+                    'decision_making_strengths',
+                    'decision_making_improvements'
                 ]
-            )
+            ).astype({
+                'channel_id': str,
+                'channel_name': str,
+                'thread_id': str,
+                'decision_initiation': int,
+                'decision_closure': int,
+                'confidence': float,
+                'decision_making_strengths': str,
+                'decision_making_improvements': str
+            })
             
-            # Process each thread
-            for (channel_name, thread_id), thread_df in (
-                valid_threaded_messages.groupby(['channel_name', 'thread_id'])
-            ):
-                # Format thread messages for prompt
-                formatted_messages = self._format_thread_for_prompt(thread_df)
+            # Process each channel
+            channel_metrics = {}
+            unique_channels = valid_threaded_messages['channel_name'].unique()
+            logger.info(f"Processing {len(unique_channels)} unique channels")
+            
+            for channel_name in unique_channels:                
+                # Get all threads for this channel
+                channel_threads = valid_threaded_messages[
+                    valid_threaded_messages['channel_name'] == channel_name
+                ]
                 
-                # Create complete prompt
-                prompt = self._create_prompt(formatted_messages)
+                # Format all thread messages for the channel
+                channel_threads_formatted = {}
+                for thread_id, thread_df in channel_threads.groupby('thread_id'):
+                    formatted_messages = self._format_thread_for_prompt(thread_df)
+                    channel_threads_formatted[thread_id] = formatted_messages
                 
-                # Get decision analysis
+                # Create complete prompt for channel analysis
+                prompt = self._create_prompt(channel_threads_formatted)
+                
+                # Get decision analysis for all threads in channel
                 analysis = self._get_decision_analysis(prompt)
                 
-                # Add results to DataFrame
-                new_row = pd.DataFrame([{
-                    'channel_id': thread_df['channel_id'].iloc[0],
-                    'channel_name': channel_name,
-                    'thread_id': thread_id,
-                    'decision_initiation': analysis['decision_initiation'],
-                    'decision_closure': analysis['decision_closure'],
-                    'confidence': analysis['confidence']
-                }])
-                analysis_df = pd.concat(
-                    [analysis_df, new_row], 
-                    ignore_index=True
-                )
-            
-            logger.debug(
-                f"Processed {len(analysis_df)} threads for decision analysis"
-            )
-            
-            # Calculate DCR for each channel
-            channel_metrics = {}
-            for channel_name in analysis_df['channel_name'].unique():
-                # Filter for high confidence analyses
+                # Get channel insights once
+                channel_insights = {
+                    'decision_making_strengths': analysis['channel_insights']['decision_making_strengths'],
+                    'decision_making_improvements': analysis['channel_insights']['decision_making_improvements']
+                }
+                
+                # Process thread-level results
+                for thread_id, thread_analysis in analysis['thread_analyses'].items():
+                    # Get channel ID for this thread
+                    thread_channel_id = (
+                        channel_threads[
+                            channel_threads['thread_id'] == thread_id
+                        ]['channel_id'].iloc[0]
+                    )
+                    
+                    # Create new row with explicit dtypes
+                    new_row = pd.DataFrame([{
+                        'channel_id': str(thread_channel_id),
+                        'channel_name': str(channel_name),
+                        'thread_id': str(thread_id),
+                        'decision_initiation': int(thread_analysis['decision_initiation']),
+                        'decision_closure': int(thread_analysis['decision_closure']),
+                        'confidence': float(thread_analysis['confidence']),
+                        'decision_making_strengths': channel_insights['decision_making_strengths'],
+                        'decision_making_improvements': channel_insights['decision_making_improvements']
+                    }])
+                    
+                    # Concatenate with explicit ignore_index
+                    analysis_df = pd.concat(
+                        [analysis_df, new_row],
+                        ignore_index=True,
+                        axis=0
+                    )
+                
+                # Calculate DCR for this channel
                 channel_data = analysis_df[
                     (analysis_df['channel_name'] == channel_name) & 
                     (analysis_df['confidence'] >= MIN_CONFIDENCE_THRESHOLD)
                 ]
                 
                 # Count initiated and closed decisions
-                initiated_decisions = channel_data['decision_initiation'].sum()
-                closed_decisions = channel_data['decision_closure'].sum()
+                initiated_decisions = int(channel_data['decision_initiation'].sum())
+                closed_decisions = int(channel_data['decision_closure'].sum())
                 
                 # Only calculate DCR if we have enough data
                 if initiated_decisions >= MIN_INITIATED_DECISIONS:
                     dcr = (closed_decisions / initiated_decisions) * 100
-                    channel_metrics[channel_name] = dcr
+                    channel_metrics[channel_name] = {
+                        'dcr': dcr,
+                        'insights': channel_insights
+                    }
                     
                     logger.debug(
                         f"Channel {channel_name}: DCR = {dcr:.2f}% "
@@ -158,7 +208,11 @@ class DecisionClosureRate(MetricModel):
                         f"({initiated_decisions} initiated decisions, "
                         f"minimum {MIN_INITIATED_DECISIONS} required)"
                     )
-            
+                    channel_metrics[channel_name] = {
+                        'dcr': None,
+                        'insights': channel_insights
+                    }
+
             return channel_metrics
             
         except Exception as e:
@@ -200,12 +254,12 @@ class DecisionClosureRate(MetricModel):
 
     def _create_prompt(
         self, 
-        formatted_messages: List[str]
+        channel_threads: Dict[str, List[str]]
     ) -> List[Dict[str, str]]:
         """Create a complete prompt for analysis.
         
         Args:
-            formatted_messages: List of formatted thread messages
+            channel_threads: Dictionary mapping thread IDs to their formatted messages
             
         Returns:
             List[Dict[str, str]]: List of message dictionaries for analysis
@@ -219,13 +273,28 @@ class DecisionClosureRate(MetricModel):
             with open(prompt_path, 'r') as f:
                 prompt_data = json.load(f)
             
-            # Format the messages as a bulleted list
-            messages_text = "\n".join([f"- {msg}" for msg in formatted_messages])
+            # Format all threads for the prompt with clear thread boundaries
+            threads_text = []
+            for thread_id, messages in channel_threads.items():
+                # Create a clear thread header
+                thread_header = f"\n{'='*50}\nThread ID: {thread_id}\n{'='*50}\n"
+                
+                # Format messages with clear separation
+                thread_messages = []
+                for msg in messages:
+                    thread_messages.append(f"  {msg}")  # Indent messages for clarity
+                
+                # Combine header and messages
+                thread_text = thread_header + "\n".join(thread_messages)
+                threads_text.append(thread_text)
             
-            # Create the user prompt by combining the template with the messages
+            # Add a final separator
+            threads_text.append("\n" + "="*50 + "\n")
+            
+            # Create the user prompt by combining the template with all threads
             try:
                 user_prompt = prompt_data["user_prompt_template"].format(
-                    messages=messages_text
+                    messages="\n".join(threads_text)
                 )
             except KeyError as e:
                 logger.error(
@@ -268,8 +337,7 @@ class DecisionClosureRate(MetricModel):
             prompt: List of message dictionaries for OpenAI API
             
         Returns:
-            Dict: Analysis result with decision_initiation, decision_closure, 
-            and confidence
+            Dict: Analysis result with thread-level analyses and channel insights
             
         Raises:
             ValueError: If the response cannot be parsed as valid JSON
@@ -280,7 +348,7 @@ class DecisionClosureRate(MetricModel):
                 model="gpt-4-0125-preview",  # EU-hosted model version
                 messages=prompt,
                 temperature=0.1,  # Low temperature for consistent results
-                max_tokens=150,  # Short response expected
+                max_tokens=500,  # Increased for channel insights
                 response_format={"type": "json_object"}  # Ensure JSON response
             )
             
@@ -290,31 +358,51 @@ class DecisionClosureRate(MetricModel):
             # Parse and validate response
             try:
                 analysis = json.loads(content)
-                logger.debug(f"Parsed analysis: {analysis}")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse response as JSON: {content}")
                 raise ValueError(f"Invalid JSON response from OpenAI API: {str(e)}")
             
             required_fields = [
-                "decision_initiation", 
-                "decision_closure", 
-                "confidence"
+                "thread_analyses",
+                "channel_insights"
             ]
             
             # Check for missing fields
             missing_fields = [field for field in required_fields if field not in analysis]
             if missing_fields:
                 logger.error(f"Response missing required fields: {missing_fields}")
-                logger.error(f"Full response: {analysis}")
                 raise ValueError(f"Response missing required fields: {missing_fields}")
             
-            # Ensure decision_closure is only 1 if decision_initiation is 1
-            if analysis['decision_initiation'] == 0 and analysis['decision_closure'] == 1:
-                logger.warning(
-                    "Invalid state: decision_closure=1 but decision_initiation=0. "
-                    "Setting decision_closure to 0."
-                )
-                analysis['decision_closure'] = 0
+            # Validate thread analyses
+            for thread_id, thread_analysis in analysis['thread_analyses'].items():
+                thread_fields = [
+                    "decision_initiation",
+                    "decision_closure",
+                    "confidence"
+                ]
+                missing_thread_fields = [
+                    field for field in thread_fields 
+                    if field not in thread_analysis
+                ]
+                if missing_thread_fields:
+                    logger.error(
+                        f"Thread {thread_id} analysis missing fields: "
+                        f"{missing_thread_fields}"
+                    )
+                    raise ValueError(
+                        f"Thread analysis missing required fields: "
+                        f"{missing_thread_fields}"
+                    )
+                
+                # Ensure decision_closure is only 1 if decision_initiation is 1
+                if (thread_analysis['decision_initiation'] == 0 and 
+                        thread_analysis['decision_closure'] == 1):
+                    logger.warning(
+                        f"Invalid state in thread {thread_id}: "
+                        "decision_closure=1 but decision_initiation=0. "
+                        "Setting decision_closure to 0."
+                    )
+                    thread_analysis['decision_closure'] = 0
             
             return analysis
             

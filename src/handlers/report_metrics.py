@@ -351,16 +351,40 @@ class ReportMetrics:
             
             # Add DCR if available
             if Metric.DCR in channel_metrics:
-                dcr = channel_metrics[Metric.DCR]
-                # Add appropriate emoji based on DCR value
-                dcr_emoji = "🟢" if dcr >= 80 else "🟠" if dcr >= 50 else "🔴"
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"• Decision Closure Rate: {dcr_emoji} {dcr:.2f}%"
-                    }
-                })
+                dcr_data = channel_metrics[Metric.DCR]
+                if isinstance(dcr_data, dict) and 'dcr' in dcr_data:
+                    dcr = dcr_data['dcr']
+                    # Add appropriate emoji based on DCR value
+                    dcr_emoji = "🟢" if dcr >= 80 else "🟠" if dcr >= 50 else "🔴"
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"• Decision Closure Rate: {dcr_emoji} {dcr:.2f}%"
+                        }
+                    })
+                    
+                    # Add decision-making insights if available
+                    if 'insights' in dcr_data:
+                        insights = dcr_data['insights']
+                        blocks.extend([
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": "*Decision-Making Strengths:*\n"
+                                            f"{insights['decision_making_strengths']}"
+                                }
+                            },
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": "*Areas for Improvement:*\n"
+                                            f"{insights['decision_making_improvements']}"
+                                }
+                            }
+                        ])
             else:
                 blocks.append({
                     "type": "section",
