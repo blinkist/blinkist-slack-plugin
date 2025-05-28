@@ -44,10 +44,10 @@ def handle_pulse_assess_command(ack, body, client, logger):
 def handle_skill_assess_view_submission(ack, body, client, logger):
     ack()
     skill_assessment_handler.handle_channel_select_submission(
-      view=body["view"],
-      user=body["user"]["id"],
-      client=client,
-      logger=logger
+        view=body["view"],
+        user=body["user"]["id"],
+        client=client,
+        logger=logger
     )
 
 @app.command("/pulse-report")
