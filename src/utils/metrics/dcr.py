@@ -169,7 +169,7 @@ class DecisionClosureRate(MetricModel):
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4-0125-preview",  # EU-hosted model version
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,  # Low temperature for consistent results
+                temperature=0.3,  # Low temperature for consistent results
                 max_tokens=2000,  # Increased for channel insights
                 response_format={"type": "json_object"}  # Ensure JSON response
             )
