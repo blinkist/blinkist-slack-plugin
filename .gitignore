@@ -1,8 +1,10 @@
 .env
 config/
+/venv
 
 # Python cache files
 src/**/__pycache__/
+/src/handlers/__pycache__
 *.pyc
 *.pyo
 *.pyd
