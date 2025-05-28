@@ -6,3 +6,4 @@ src/handlers/__pycache__/
 *.pyc
 /src/handlers/__pycache__
 
+/venv
