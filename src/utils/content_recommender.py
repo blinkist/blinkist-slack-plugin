@@ -65,64 +65,78 @@ class ContentRecommender:
         Raises:
             ValueError: If neither channel insights nor prompt is provided
         """
-        try:
-            # Determine which prompt to use
-            if prompt:
-                final_prompt = prompt
-            elif all([channel_name, strengths, improvements]):
-                final_prompt = self._create_prompt(
-                    channel_name, strengths, improvements
-                )
-            else:
-                raise ValueError(
-                    "Either provide a direct prompt or all channel insights"
-                )
-            
-            # Prepare API payload
-            payload = {
-                "assistantId": self.assistant_id,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": final_prompt
+        # TODO: Re-enable actual recommendation logic
+        # try:
+        #     # Determine which prompt to use
+        #     if prompt:
+        #         final_prompt = prompt
+        #     elif all([channel_name, strengths, improvements]):
+        #         final_prompt = self._create_prompt(
+        #             channel_name, strengths, improvements
+        #         )
+        #     else:
+        #         raise ValueError(
+        #             "Either provide a direct prompt or all channel insights"
+        #         )
+        #     
+        #     # Prepare API payload
+        #     payload = {
+        #         "assistantId": self.assistant_id,
+        #         "messages": [
+        #             {
+        #                 "role": "user",
+        #                 "content": final_prompt
+        #             }
+        #         ],
+        #         "output": {
+        #             "type": "enum",
+        #             "enum": ["<string>"],
+        #             "schema": {}
+        #         }
+        #     }
+        #     
+        #     # Send request to API
+        #     response = requests.request(
+        #         "POST",
+        #         self.api_url,
+        #         json=payload,
+        #         headers=self.headers,
+        #         timeout=30
+        #     )
+        #     response.raise_for_status()
+        #     
+        #     # Process and return recommendations
+        #     return self._process_api_response(response.json())
+        #     
+        # except Exception as e:
+        #     logger.error(f"Error generating recommendations: {str(e)}")
+        #     return {
+        #         "blocks": [
+        #             {
+        #                 "type": "section",
+        #                 "text": {
+        #                     "type": "mrkdwn",
+        #                     "text": (
+        #                         "Sorry, there was an error generating "
+        #                         "recommendations."
+        #                     )
+        #                 }
+        #             }
+        #         ]
+        #     }
+        
+        # Return placeholder for testing
+        return {
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Recommendations Placeholder"
                     }
-                ],
-                "output": {
-                    "type": "enum",
-                    "enum": ["<string>"],
-                    "schema": {}
                 }
-            }
-            
-            # Send request to API
-            response = requests.request(
-                "POST",
-                self.api_url,
-                json=payload,
-                headers=self.headers,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            # Process and return recommendations
-            return self._process_api_response(response.json())
-            
-        except Exception as e:
-            logger.error(f"Error generating recommendations: {str(e)}")
-            return {
-                "blocks": [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": (
-                                "Sorry, there was an error generating "
-                                "recommendations."
-                            )
-                        }
-                    }
-                ]
-            }
+            ]
+        }
     
     def _test_connection(self) -> None:
         """Test the connection to the Langdock API.
