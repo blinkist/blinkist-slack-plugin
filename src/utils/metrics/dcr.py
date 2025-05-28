@@ -118,15 +118,7 @@ class DecisionClosureRate(MetricModel):
                             f"for channel {channel_name}. Minimum required: "
                             f"{MIN_INITIATED_DECISIONS}"
                         )
-                        return {
-                            'dcr': 0,
-                            'insights': {
-                                "decision_making_strengths": 
-                                    "Not enough data for analysis",
-                                "decision_making_improvements": 
-                                    "Not enough data for analysis"
-                            }
-                        }
+                        return {}
                     
                     # Validate logical consistency: closed threads cannot exceed 
                     # initiated threads
