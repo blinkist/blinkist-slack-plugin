@@ -1,7 +1,6 @@
 from typing import Dict, Any, List
 import logging
 import pandas as pd
-from datetime import datetime, timedelta
 from slack_sdk.errors import SlackApiError
 from utils.message_retriever import MessageRetriever
 from utils.metrics import ParticipationEquityIndex, DecisionClosureRate, Metric
@@ -60,7 +59,9 @@ class ReportMetrics:
                             "name": channel["name"]
                         })
                 except SlackApiError as e:
-                    logger.error(f"Error fetching info for channel {channel_id}: {e}")
+                    logger.error(
+                        f"Error fetching info for channel {channel_id}: {e}"
+                    )
             
             # Create options from valid channels
             options = [
@@ -84,15 +85,24 @@ class ReportMetrics:
                 view={
                     "type": "modal",
                     "callback_id": "pulse_report_channel_select",
-                    "private_metadata": str(days),  # Store days in private metadata
-                    "title": {"type": "plain_text", "text": "Channel Pulse Report"},
-                    "submit": {"type": "plain_text", "text": "Generate Report"},
+                    "private_metadata": str(days),  # Store days in metadata
+                    "title": {
+                        "type": "plain_text",
+                        "text": "Channel Pulse Report"
+                    },
+                    "submit": {
+                        "type": "plain_text",
+                        "text": "Generate Report"
+                    },
                     "blocks": [
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"Select channels to analyze from the last {days} days:"
+                                "text": (
+                                    f"Select channels to analyze from the last "
+                                    f"{days} days:"
+                                )
                             }
                         },
                         {
@@ -119,18 +129,21 @@ class ReportMetrics:
         except SlackApiError as e:
             logger.error(f"Error opening channel select modal: {e}")
 
-    def handle_channel_select_submission(self, view, user, client, logger, days: int = 30):
-        """Handle the channel selection submission.
+    def handle_channel_select_submission(
+        self,
+        view,
+        user,
+        client,
+        logger,
+        days: int = 30
+    ):
+        """Handle the channel selection submission."""
         
-        Args:
-            view: The view submission data
-            user: The user ID who submitted the form
-            client: The Slack client instance
-            logger: Logger instance
-            days: Number of days to look back (default: 30)
-        """
         # Extract selected channel IDs from the modal submission
-        selected_channels = view["state"]["values"]["channels_block"]["channels_select"]["selected_options"]
+        selected_channels = (
+            view["state"]["values"]["channels_block"]
+            ["channels_select"]["selected_options"]
+        )
         
         # Check if "All Channels" was selected
         if any(ch["value"] == "all" for ch in selected_channels):
@@ -144,8 +157,11 @@ class ReportMetrics:
         try:
             client.chat_postMessage(
                 channel=user,
-                text=":loading: *Processing the channels report...*\n"
-                     "This can take a few minutes. I'll message you when it's ready."
+                text=(
+                    ":loading: *Processing the channels report...*\n"
+                    "This can take a few minutes. I'll message you when "
+                    "it's ready."
+                )
             )
         except SlackApiError as e:
             logger.error(f"Error sending acknowledgment message: {e}")
@@ -157,7 +173,11 @@ class ReportMetrics:
             # Send report to user
             client.chat_postMessage(
                 channel=user,
-                blocks=report["blocks"]
+                blocks=report["blocks"],
+                text=(
+                    "Unfortunately, I was unable to display the Pulse Report "
+                    "correctly. Please try again later."
+                )
             )
             
         except Exception as e:
@@ -172,7 +192,11 @@ class ReportMetrics:
             except SlackApiError as e:
                 logger.error(f"Error sending error notification: {e}")
 
-    def generate_slack_report(self, days: int = 30, channel_id_list: List[str] = None) -> str:
+    def generate_slack_report(
+        self,
+        days: int = 30,
+        channel_id_list: List[str] = None
+    ) -> str:
         """Generate a complete report of channel metrics for Slack.
         
         Args:
@@ -213,17 +237,12 @@ class ReportMetrics:
             logger.error(f"Error generating report: {str(e)}")
             return "Sorry, there was an error generating the report"
 
-    def _process_channel_data(self, channel_id_list: List[str] = None) -> pd.DataFrame:
-        """Process all public channel message data and create a DataFrame.
+    def _process_channel_data(
+        self,
+        channel_id_list: List[str] = None
+    ) -> pd.DataFrame:
+        """Process all public channel message data and create a DataFrame."""
         
-        Args:
-            channel_id_list (List[str], optional): List of channel IDs to process.
-                If None, processes all installed channels.
-        
-        Returns:
-            pd.DataFrame: DataFrame containing channel_id, channel_name, timestamp,
-                         message data, message type and subtype
-        """
         try:
             # Use MessageRetriever to get messages
             message_retriever = MessageRetriever(self.app, self.channel_tracker)
@@ -237,7 +256,7 @@ class ReportMetrics:
             return pd.DataFrame()
         
     def _compute_metrics(
-        self, 
+        self,
         df: pd.DataFrame,
         metrics: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Dict[str, Any]]:
@@ -267,14 +286,15 @@ class ReportMetrics:
             return metrics
 
     def _format_slack_message(
-        self, 
+        self,
         metrics: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Format the metrics into a Slack message using Block Kit.
         
         Args:
-            metrics (Dict[str, Dict[str, Any]]): Dictionary mapping channel names to
-                their metrics including message counts and participation equity index
+            metrics (Dict[str, Dict[str, Any]]): Dictionary mapping channel names
+                to their metrics including message counts and participation equity
+                index
             
         Returns:
             Dict[str, Any]: Slack message JSON payload with blocks
@@ -285,7 +305,10 @@ class ReportMetrics:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"📊 Channel Pulse Report (Last {self.days} days)",
+                    "text": (
+                        f"📊 Channel Pulse Report "
+                        f"(Last {self.days} days)"
+                    ),
                     "emoji": True
                 }
             },
@@ -298,9 +321,12 @@ class ReportMetrics:
                     "type": "mrkdwn",
                     "text": "*Participation Equity Index (PEI)*\n"
                             "Measures how balanced participation is within a team.\n\n"
-                            "🟢 *Good PEI (≥ 0.75)*: Balanced participation, collaborative environment\n"
-                            "🟠 *Moderate PEI (0.5–0.75)*: Some imbalance, may be acceptable depending on context\n"
-                            "🔴 *Low PEI (< 0.5)*: Significant imbalance, potential team dynamics issues"
+                            "🟢 *Good PEI (≥ 0.75)*: Balanced participation, "
+                            "collaborative environment\n"
+                            "🟠 *Moderate PEI (0.5–0.75)*: Some imbalance, "
+                            "may be acceptable depending on context\n"
+                            "🔴 *Low PEI (< 0.5)*: Significant imbalance, "
+                            "potential team dynamics issues"
                 }
             },
             {
@@ -311,10 +337,14 @@ class ReportMetrics:
                 "text": {
                     "type": "mrkdwn",
                     "text": "*Decision Closure Rate (DCR)*\n"
-                            "Measures how effectively a team moves from initiating decisions to finalizing them.\n\n"
-                            "🟢 *Good DCR (≥ 80%)*: Effective decision-making, strong alignment\n"
-                            "🟠 *Moderate DCR (50%–80%)*: Some delays, may be acceptable in iterative environments\n"
-                            "🔴 *Low DCR (< 50%)*: Significant inefficiencies, potential decision paralysis"
+                            "Measures how effectively a team moves from "
+                            "initiating decisions to finalizing them.\n\n"
+                            "🟢 *Good DCR (≥ 80%)*: Effective decision-making, "
+                            "strong alignment\n"
+                            "🟠 *Moderate DCR (50%–80%)*: Some delays, may be "
+                            "acceptable in iterative environments\n"
+                            "🔴 *Low DCR (< 50%)*: Significant inefficiencies, "
+                            "potential decision paralysis"
                 }
             },
             {
@@ -341,7 +371,10 @@ class ReportMetrics:
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"• Participation Equity Index: {pei_emoji} {pei:.2f}"
+                        "text": (
+                            "• Participation Equity Index: "
+                            f"{pei_emoji} {pei:.2f}"
+                        )
                     }
                 })
             else:
@@ -364,7 +397,10 @@ class ReportMetrics:
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"• Decision Closure Rate: {dcr_emoji} {dcr:.2f}%"
+                            "text": (
+                                f"• Decision Closure Rate: "
+                                f"{dcr_emoji} {dcr:.2f}%"
+                            )
                         }
                     })
                     
@@ -376,16 +412,20 @@ class ReportMetrics:
                                 "type": "section",
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": "*Decision-Making Strengths:*\n"
-                                            f"{insights['decision_making_strengths']}"
+                                    "text": (
+                                        "*Decision-Making Strengths:*\n"
+                                        f"{insights['decision_making_strengths']}"
+                                    )
                                 }
                             },
                             {
                                 "type": "section",
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": "*Areas for Improvement:*\n"
-                                            f"{insights['decision_making_improvements']}"
+                                    "text": (
+                                        "*Areas for Improvement:*\n"
+                                        f"{insights['decision_making_improvements']}"
+                                    )
                                 }
                             },
                             {
@@ -395,28 +435,37 @@ class ReportMetrics:
                                         "type": "button",
                                         "text": {
                                             "type": "plain_text",
-                                            "text": "Get Content Recommendations",
+                                            "text": (
+                                                "Get Content Recommendations"
+                                            ),
                                             "emoji": True
                                         },
                                         "style": "primary",
                                         "value": json.dumps({
                                             "channel_name": channel_name,
-                                            "strengths": insights['decision_making_strengths'],
-                                            "improvements": insights['decision_making_improvements']
+                                            "strengths": (
+                                                insights['decision_making_strengths']
+                                            ),
+                                            "improvements": (
+                                                insights['decision_making_improvements']
+                                            )
                                         }),
                                         "action_id": "get_content_recommendations"
                                     }
                                 ]
                             }
                         ])
-            else:
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "• Decision Closure Rate: Not enough data available"
-                    }
-                })
+                else:
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": (
+                                "• Decision Closure Rate: Not enough data "
+                                "available"
+                            )
+                        }
+                    })
             
             # Add divider between channels
             blocks.append({"type": "divider"})
@@ -444,8 +493,11 @@ class ReportMetrics:
             # Send immediate acknowledgment
             client.chat_postMessage(
                 channel=body["channel"]["id"],
-                text=f":books: *Collecting content recommendations for #{channel_name}...*\n"
-                     "This may take a moment. I'll message you when it's ready."
+                text=(
+                    f":books: *Collecting content recommendations for "
+                    f"#{channel_name}...*\n"
+                    "This may take a moment. I'll message you when it's ready."
+                )
             )
             
             # Generate recommendations
@@ -458,7 +510,11 @@ class ReportMetrics:
             # Send recommendations as a new message
             client.chat_postMessage(
                 channel=body["channel"]["id"],
-                blocks=recommendations["blocks"]
+                blocks=recommendations["blocks"],
+                text=(
+                    "Unfortunately, I was unable to display the content "
+                    "recommendations correctly. Please try again later."
+                )
             )
             
         except Exception as e:
