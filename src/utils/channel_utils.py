@@ -60,7 +60,7 @@ class ChannelTracker:
             while True:
                 # Prepare parameters for the API call
                 params = {
-                    "types": ["public_channel", "private_channel"],  # TODO: remove private channels
+                    "types": ["public_channel"],
                     "exclude_archived": True,
                     "limit": 100  # Maximum allowed by Slack API
                 }
