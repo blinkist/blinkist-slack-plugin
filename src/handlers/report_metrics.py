@@ -487,7 +487,6 @@ class ReportMetrics:
             # Get the insights from the button value
             button_data = json.loads(body["actions"][0]["value"])
             channel_name = button_data["channel_name"]
-            strengths = button_data["strengths"]
             improvements = button_data["improvements"]
             
             # Send immediate acknowledgment
@@ -503,7 +502,6 @@ class ReportMetrics:
             # Generate recommendations
             recommendations = self.content_recommender.get_recommendations(
                 channel_name=channel_name,
-                strengths=strengths,
                 improvements=improvements
             )
             
