@@ -5,6 +5,8 @@ import httpx
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from slack_sdk.web.async_client import AsyncWebClient
+import asyncio
+import threading
 
 CHANNEL = "#blinkist-pulse-daily"
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Berlin")
@@ -78,7 +80,19 @@ async def post_daily_pulse():
         logger.error(f"Slack API error: {e}")
 
 def start_daily_pulse_scheduler():
-    scheduler = AsyncIOScheduler(timezone=pytz.timezone(TIMEZONE))
-    scheduler.add_job(post_daily_pulse, "cron", hour=9, minute=0)
-    scheduler.start()
-    logger.info("Daily Blinkist Pulse scheduler started.") 
+    def run_scheduler():
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        scheduler = AsyncIOScheduler(timezone=pytz.timezone(TIMEZONE))
+        scheduler.add_job(post_daily_pulse, "interval", minutes=10)
+        scheduler.start()
+        logger.info("Blinkist Pulse scheduler started (every 10 minutes).")
+        
+        # Keep the loop running
+        loop.run_forever()
+    
+    # Start the scheduler in a separate thread with its own event loop
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start() 

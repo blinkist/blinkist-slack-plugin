@@ -4,7 +4,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from handlers.command_handler import CommandHandler
 import schedule
 import time
 import threading
@@ -19,7 +18,6 @@ SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
 app = App(token=SLACK_BOT_TOKEN)
 
 # Initialize handlers
-command_handler = CommandHandler(app)
 skill_assessment_handler = SkillAssessmentHandler(app)
 
 @app.command("/pulse-assess")
@@ -44,5 +42,3 @@ def main():
 if __name__ == "__main__":
     # Start the daily Blinkist Pulse scheduler
     start_daily_pulse_scheduler()
-    import asyncio
-    asyncio.get_event_loop().run_forever() 
