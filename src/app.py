@@ -10,7 +10,6 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from utils.channel_utils import ChannelTracker
-from handlers.command_handler import CommandHandler
 from handlers.skill_assessment import SkillAssessmentHandler
 from handlers.report_metrics import ReportMetrics
 
@@ -30,10 +29,8 @@ channel_tracker = ChannelTracker(app)
 channel_tracker.update_installed_channels()
 
 # Initialize handlers
-command_handler = CommandHandler(app)
 skill_assessment_handler = SkillAssessmentHandler(app)
 report_metrics = ReportMetrics(app, channel_tracker)
-
 
 @app.command("/pulse-assess")
 def handle_pulse_assess_command(ack, body, client, logger):
@@ -52,15 +49,7 @@ def handle_skill_assess_view_submission(ack, body, client, logger):
 
 @app.command("/pulse-report")
 def pulse_report_command(ack, body, client, logger):
-    """Handle the /pulse-report command.
-    
-    Opens a modal for channel selection and then generates a report for the
-    selected channels.
-    
-    Args:
-        days (optional): Number of days to look back (default: 30)
-    """
-    # Acknowledge the command request
+    """Handle the /pulse-report command."""
     ack()
     
     try:
@@ -94,15 +83,7 @@ def pulse_report_command(ack, body, client, logger):
 
 @app.view("pulse_report_channel_select")
 def handle_channel_select_submission(ack, body, client, logger):
-    """Handle the submission of the channel selection modal.
-    
-    Args:
-        ack: Function to acknowledge the view submission
-        body: The view submission data
-        client: The Slack client instance
-        logger: Logger instance
-    """
-    # Acknowledge the view submission
+    """Handle the submission of the channel selection modal."""
     ack()
     
     try:
@@ -140,6 +121,7 @@ def run_scheduler():
         time.sleep(60)
 
 def main():
+
     # Start the scheduler in a separate thread
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
