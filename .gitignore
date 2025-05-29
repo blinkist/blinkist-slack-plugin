@@ -10,3 +10,4 @@ src/**/__pycache__/
 *.pyo
 *.pyd
 .Python
+/venv
