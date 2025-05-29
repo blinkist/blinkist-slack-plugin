@@ -8,10 +8,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+import schedule
+import time
+import threading
+
 
 from utils.channel_utils import ChannelTracker
 from handlers.skill_assessment import SkillAssessmentHandler
 from handlers.report_metrics import ReportMetrics
+from handlers.daily_pulse import start_daily_pulse_scheduler
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -131,4 +136,5 @@ def main():
     handler.start()
 
 if __name__ == "__main__":
-    main() 
+    # Start the daily Blinkist Pulse scheduler
+    start_daily_pulse_scheduler()
