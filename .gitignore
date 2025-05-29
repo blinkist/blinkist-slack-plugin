@@ -3,7 +3,10 @@ config/
 
 src/utils/__pycache__/
 src/handlers/__pycache__/
-*.pyc
-/src/handlers/__pycache__
 
-/venv
+src/**/__pycache__/
+/src/handlers/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
