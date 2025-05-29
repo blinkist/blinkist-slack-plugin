@@ -2,7 +2,7 @@ import time
 import json
 import random
 from datetime import datetime
-from config.settings import Settings
+import os
 
 class QuietChannelHandler:
     def __init__(self, app):
@@ -20,12 +20,17 @@ class QuietChannelHandler:
         
     def check_channels(self):
         """Check all monitored channels for inactivity"""
-        if not Settings.is_working_hours():
+        # Check if current time is within working hours
+        current_hour = datetime.now().hour
+        working_hours_start = int(os.environ.get('WORKING_HOURS_START', 9))
+        working_hours_end = int(os.environ.get('WORKING_HOURS_END', 17))
+        
+        if not (working_hours_start <= current_hour < working_hours_end):
             return
             
         current_time = time.time()
         
-        for channel in Settings.MONITORED_CHANNELS:
+        for channel in os.environ.get('MONITORED_CHANNELS'):
             last_message_time = self.last_message_times.get(channel, 0)
             last_nudge_time = self.last_nudge_times.get(channel, 0)
             
@@ -33,8 +38,8 @@ class QuietChannelHandler:
             hours_since_nudge = (current_time - last_nudge_time) / 3600
             
             # Send nudge if channel is quiet and we haven't sent one recently
-            if (hours_since_message >= Settings.QUIET_THRESHOLD_HOURS and 
-                hours_since_nudge >= Settings.QUIET_THRESHOLD_HOURS):
+            if (hours_since_message >= os.environ.get('QUIET_THRESHOLD_HOURS') and 
+                hours_since_nudge >= os.environ.get('QUIET_THRESHOLD_HOURS')):
                 self.send_nudge(channel)
                 self.last_nudge_times[channel] = current_time
     

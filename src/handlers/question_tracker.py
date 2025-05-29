@@ -1,6 +1,5 @@
-from datetime import datetime, timedelta
-from config.settings import Settings
-import re
+from datetime import datetime
+import os
 
 class QuestionTracker:
     def __init__(self, app):
@@ -43,7 +42,7 @@ class QuestionTracker:
             # Skip if we've already reminded or if it's too early
             if (question['reminded'] or 
                 (current_time - question['timestamp']).total_seconds() < 
-                Settings.QUESTION_REMINDER_MINUTES * 60):  # Changed from hours to minutes
+                os.environ.get('QUESTION_REMINDER_MINUTES') * 60):  # Changed from hours to minutes
                 continue
             
             # Check if question has replies
