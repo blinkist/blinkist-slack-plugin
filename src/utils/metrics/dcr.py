@@ -4,9 +4,10 @@ import json
 import os
 from typing import Dict, List, Any
 import pandas as pd
-from openai import AsyncOpenAI
+import requests
 from .base import MetricModel, Metric
 import asyncio
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,8 @@ MAX_CONCURRENT_CALLS = 4
 class DecisionClosureRate(MetricModel):
     """Decision Closure Rate (DCR) metric for Slack channels.
     
-    Measures how quickly decisions are made and closed in threaded conversations.
+    Measures how quickly decisions are made and closed in threaded 
+    conversations.
     """
     
     name = Metric.DCR.value
@@ -34,29 +36,28 @@ class DecisionClosureRate(MetricModel):
         """Initialize the DecisionClosureRate metric.
         
         Raises:
-            ValueError: If OpenAI API key is not found in environment variables
+            ValueError: If Langdock API key is not found in environment 
+            variables
         """
         
-        # Get OpenAI API key from environment
-        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not openai_api_key:
-            logger.error("OpenAI API key not found in environment variables")
+        # Get Langdock API key from environment
+        self.api_key = os.environ["LANGDOCK_API_KEY"]
+        if not self.api_key:
+            logger.error(
+                "Langdock API key not found in environment variables"
+            )
             raise ValueError(
-                "OpenAI API key not found in environment variables"
+                "Langdock API key not found in environment variables"
             )
         
-        # Initialize OpenAI client with minimal arguments
-        try:
-            self.openai_client = AsyncOpenAI(api_key=openai_api_key)
-        except TypeError as e:
-            logger.warning(
-                f"Error initializing OpenAI client with default arguments: {e}"
-            )
-            # Try alternative initialization without proxies
-            self.openai_client = AsyncOpenAI(
-                api_key=openai_api_key,
-                http_client=None  # Let OpenAI create its own client
-            )
+        # Set up API endpoint and headers
+        self.api_url = "https://api.langdock.com/anthropic/eu/v1/messages"
+        self.headers = {
+            "Authorization": f"{self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        self.system_prompt = self._get_system_prompt()
 
     def compute(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
         """Compute Decision Closure Rate for each channel.
@@ -65,7 +66,8 @@ class DecisionClosureRate(MetricModel):
             df (pd.DataFrame): DataFrame containing message data
             
         Returns:
-            Dict[str, Dict[str, Any]]: Dictionary mapping channel names to their DCR
+            Dict[str, Dict[str, Any]]: Dictionary mapping channel names to 
+            their DCR
         """
         try:
             # Initialize results dictionary
@@ -114,9 +116,9 @@ class DecisionClosureRate(MetricModel):
                     # Skip DCR calculation if not enough initiated decisions
                     if initiated_threads < MIN_INITIATED_DECISIONS:
                         logger.info(
-                            f"Not enough initiated decisions ({initiated_threads}) "
-                            f"for channel {channel_name}. Minimum required: "
-                            f"{MIN_INITIATED_DECISIONS}"
+                            f"Not enough initiated decisions "
+                            f"({initiated_threads}) for channel {channel_name}. "
+                            f"Minimum required: {MIN_INITIATED_DECISIONS}"
                         )
                         return {}
                     
@@ -166,15 +168,31 @@ class DecisionClosureRate(MetricModel):
         """
         try:
             logger.info("Sending request to analysis API")
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4-0125-preview",  # EU-hosted model version
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,  # Low temperature for consistent results
-                max_tokens=2000,  # Increased for channel insights
-                response_format={"type": "json_object"}  # Ensure JSON response
-            )
+
+            payload = {
+                "max_tokens": 2000,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "model": "claude-3-7-sonnet-20250219",
+                "stream": False,
+                "system": self.system_prompt,
+                "temperature": 0.5
+            }
             
-            content = response.choices[0].message.content.strip()
+            response = requests.request(
+                "POST",
+                self.api_url,
+                json=payload,
+                headers=self.headers
+            )
+            response.raise_for_status()
+
+            content = response.json()["content"][0]["text"]
+            content = self._process_api_response(content)
             logger.info(f"Received response from analysis API: {content}")
             
             # Parse and validate response
@@ -239,102 +257,6 @@ class DecisionClosureRate(MetricModel):
                 }
             }
 
-    def _create_thread_prompt(self, formatted_messages: str) -> str:
-        """Create prompt for thread-level analysis.
-        
-        Args:
-            formatted_messages (str): Formatted message history
-            
-        Returns:
-            str: Prompt for thread analysis
-        """
-        return f"""Analyze the following Slack thread for decision-making 
-effectiveness. First, determine if a decision was initiated:
-
-Decision Status Analysis:
-1. Check for Decision Initiation:
-   - Look for a message that indicates a decision-making process has started
-   - For example, messages containing keywords like "let's decide," 
-     "proposal," "vote," or "options" could be flagged
-   - Identify when a specific issue or choice is first raised
-   - Note if the decision scope and context are clearly defined
-   - If no decision initiation is detected, mark as "no_decision"
-
-2. If a decision was initiated, determine its current state:
-   - "initiated": Decision was clearly started but not yet in progress
-   - "in_progress": Active discussion about the decision is ongoing
-   - "closed": Decision was completed with clear resolution
-   - For closure, for example, look for messages with keywords like 
-     "agreed," "approved," "finalized," or "let's proceed"
-   - IMPORTANT: A decision can only be "closed" if there is clear 
-     evidence it was previously "initiated"
-   - If no clear initiation is found, the status cannot be "closed"
-
-3. If no decision was initiated:
-   - Mark as "no_decision"
-   - Do not consider any other decision states
-   - Focus on the general discussion effectiveness instead
-
-Then evaluate the decision-making process using these criteria:
-
-1. Evidence of Clear Decision-Making Process
-   - Look for structured discussions
-   - Clear problem statements
-   - Systematic evaluation of options
-
-2. Inclusivity and Participation
-   - Balanced contribution from team members
-   - Diverse perspectives considered
-   - Active engagement in discussions
-
-3. Efficiency in Reaching Decisions
-   - Appropriate time to reach decisions
-   - Focused discussions
-   - Clear action items
-
-4. Clarity of Outcomes
-   - Explicit decisions made
-   - Clear next steps
-   - Documented conclusions
-
-5. Tone and Collaboration
-   - Constructive dialogue
-   - Respectful communication
-   - Open to different viewpoints
-
-6. Use of Data and Evidence
-   - Data-driven discussions
-   - Fact-based arguments
-   - Clear rationale for decisions
-
-7. Accountability and Follow-Up
-   - Clear ownership of actions
-   - Follow-up on decisions
-   - Progress tracking
-
-{'='*50}
-THREAD MESSAGES:
-{'='*50}
-
-{formatted_messages}
-
-{'='*50}
-
-Provide your analysis in this JSON format:
-{{
-    "status": "initiated|in_progress|closed|no_decision",
-    "confidence": <float between 0 and 1>,
-    "process_summary": {{
-        "clear_process": <evaluation of decision-making process>,
-        "inclusivity": <evaluation of participation and inclusivity>,
-        "efficiency": <evaluation of decision-making efficiency>,
-        "outcome_clarity": <evaluation of outcome clarity>,
-        "collaboration": <evaluation of tone and collaboration>,
-        "evidence_use": <evaluation of data and evidence usage>,
-        "accountability": <evaluation of accountability and follow-up>
-    }}
-}}"""
-
     async def _get_channel_analysis(self) -> Dict[str, Any]:
         """Stage 2: Analyze channel-wide decision-making patterns.
         
@@ -363,10 +285,136 @@ Provide your analysis in this JSON format:
         except Exception as e:
             logger.error(f"Error in channel analysis: {str(e)}")
             return {
-                "decision_making_strengths": "Error analyzing channel patterns",
-                "decision_making_improvements": "Error analyzing channel patterns"
+                "decision_making_strengths": (
+                    "Error analyzing channel patterns"
+                ),
+                "decision_making_improvements": (
+                    "Error analyzing channel patterns"
+                )
             }
+
+    @staticmethod
+    def _get_system_prompt() -> str:
+        """Get system prompt for thread analysis.
+        
+        Returns:
+            str: System prompt
+        """
+        return """Analyze the following Slack thread for decision-making 
+effectiveness. First, determine if a decision was initiated:
+
+Decision Status Analysis:
+1. Check for Decision Initiation:
+   - Look for a message that indicates a decision-making process has started
+   - For example, messages containing keywords like "let's decide," 
+     "proposal," "vote," or "options" could be flagged
+   - Identify when a specific issue or choice is first raised
+   - Note if the decision scope and context are clearly defined
+   - If no decision initiation is detected, mark as "no_decision"
+
+2. If a decision was initiated, determine its current state:
+   - "initiated": Decision was clearly started but not yet in progress
+   - "in_progress": Active discussion about the decision is ongoing
+   - "closed": Decision was completed with clear resolution
+   - For closure, for example, look for messages with keywords like 
+     "agreed," "approved," "finalized," or "let's proceed"
+   - IMPORTANT: A decision can only be "closed" if there is clear 
+     evidence it was previously "initiated"
+   - If no clear initiation is found, the status cannot be "closed"
+
+3. If no decision was initiated:
+   - Mark as "no_decision"
+   - Do not consider any other decision states
+   - Focus on the general discussion effectiveness instead
+
+Then evaluate the decision-making process using these criteria:
+
+1. **Clarity of the Decision-Making Process**:
+   - Assess whether the discussion is structured and focused.
+   - Look for clear problem statements and systematic evaluation of options.
+
+2. **Inclusivity and Participation**:
+   - Evaluate whether multiple team members contribute to the discussion.
+   - Check if diverse perspectives are considered and quieter members are 
+     engaged.
+   - It is acceptable if only a subset of the team is involved in the 
+     discussion.
+
+3. **Efficiency in Reaching Decisions**:
+   - Determine if decisions are made within a reasonable timeframe.
+   - Look for focused discussions and minimal unnecessary delays.
+
+4. **Clarity of Outcomes**:
+   - Check if the final decision is explicitly stated.
+   - Look for clear next steps or action items.
+
+5. **Tone and Collaboration**:
+   - Assess whether the tone of the discussion is constructive and 
+     respectful.
+   - Check for openness to different viewpoints and productive handling of 
+     disagreements.
+   - It is acceptable if the tone is more informal, as long as it is not 
+     disrespectful or hostile.
+
+6. **Use of Data and Evidence**:
+   - Determine if arguments are supported by data, reports, or facts.
+   - Check if decisions are based on evidence rather than intuition.
+   - Not all decisions need to be data-driven, but arguments should be 
+     clearly stated.
+
+7. **Accountability and Follow-Up**:
+   - Evaluate whether ownership of tasks is clearly assigned.
+   - Look for follow-up messages to track progress on decisions.
+   - It is acceptable if it's obvious that the decision initiator is 
+     responsible for the execution of the decision.
+"""
     
+    def _create_thread_prompt(self, formatted_messages: str) -> str:
+        """Create prompt for thread-level analysis.
+        
+        Args:
+            formatted_messages (str): Formatted message history
+            
+        Returns:
+            str: Prompt for thread analysis
+        """
+        return f"""Analyze the following Slack thread for decision-making 
+effectiveness. First, determine if a decision was initiated, and if so, its 
+current state. Additionally, indicate how confident you are in your 
+assessment, on a scale of 0 to 1.
+
+Then evaluate the decision-making process based on the following criteria:
+1. Evidence of Clear Decision-Making Process
+2. Inclusivity and Participation
+3. Efficiency in Reaching Decisions
+4. Clarity of Outcomes
+5. Tone and Collaboration
+6. Use of Data and Evidence
+7. Accountability and Follow-Up
+
+{'='*50}
+THREAD MESSAGES:
+{'='*50}
+
+{formatted_messages}
+
+{'='*50}
+
+Provide your analysis in this JSON format, and return ONLY the JSON object:
+{{
+    "status": "initiated|in_progress|closed|no_decision",
+    "confidence": <float between 0 and 1>,
+    "process_summary": {{
+        "clear_process": <evaluation of decision-making process>,
+        "inclusivity": <evaluation of participation and inclusivity>,
+        "efficiency": <evaluation of decision-making efficiency>,
+        "outcome_clarity": <evaluation of outcome clarity>,
+        "collaboration": <evaluation of tone and collaboration>,
+        "evidence_use": <evaluation of data and evidence usage>,
+        "accountability": <evaluation of accountability and follow-up>
+    }}
+}}"""
+
     def _create_channel_prompt(self) -> str:
         """Create prompt for channel-level analysis.
         
@@ -423,7 +471,7 @@ Focus on:
 3. Areas for improvement
 4. Overall effectiveness of decision-making
 
-Provide your analysis in this JSON format:
+Provide your analysis in this JSON format, and return ONLY the JSON object:
 {{
     "decision_making_strengths": "Write 2-3 sentences summarizing the key 
     strengths in the team's decision-making process. Focus on patterns that 
@@ -485,7 +533,9 @@ Provide your analysis in this JSON format:
             thread_df = channel_df[channel_df['is_thread']]
             
             # Group by thread_id to get all messages in each thread
-            for thread_id, thread_messages_df in thread_df.groupby('thread_id'):
+            for thread_id, thread_messages_df in thread_df.groupby(
+                'thread_id'
+            ):
                 # Skip if not enough participants
                 if (
                     thread_messages_df['user_id'].nunique() 
@@ -502,4 +552,25 @@ Provide your analysis in this JSON format:
             
         except Exception as e:
             logger.error(f"Error getting thread data: {str(e)}")
-            return {} 
+            return {}
+
+    def _process_api_response(self, content: str) -> str:
+        """Extract JSON content from code blocks in the response.
+        
+        Args:
+            content: Raw content string from API response
+            
+        Returns:
+            Extracted JSON content string
+        """
+        if "```json" in content:
+            # Find the start of the JSON code block
+            content = content[
+                content.find("```json"):
+            ].strip("```json")
+            # Find the end of the JSON code block
+            content = content[
+                :content.find("```"):
+            ].strip("```")
+        
+        return content
