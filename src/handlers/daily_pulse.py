@@ -112,12 +112,12 @@ async def fetch_langdock_recommendation():
     base_prompt = "Recommend"
     
     # Add exclusions to the base prompt
-    # if excluded_news_topics or excluded_books:
-    #     base_prompt += "\n\nIMPORTANT EXCLUSIONS:"
-    #     if excluded_news_topics:
-    #         base_prompt += f"\nexcluded_news_topics: {excluded_news_topics}"
-    #     if excluded_books:
-    #         base_prompt += f"\nexcluded_books: {excluded_books}"
+    if excluded_news_topics or excluded_books:
+        base_prompt += "\n\nIMPORTANT EXCLUSIONS:"
+        if excluded_news_topics:
+            base_prompt += f"\nExcluded news topics (do not use): {excluded_news_topics}"
+        if excluded_books:
+            base_prompt += f"\nExcluded book content IDs (do not recommend): {excluded_books}"
     
     payload = {
         "assistantId": ASSISTANT_ID,
@@ -136,6 +136,9 @@ async def fetch_langdock_recommendation():
 
     logger.info(f"Making request with {len(excluded_news_topics)} excluded news topics and {len(excluded_books)} excluded books")
     logger.info(f"Base prompt: {base_prompt}")
+    logger.info(f"Full request URL: {LANGDOCK_API_URL}")
+    logger.info(f"Full request headers: {headers}")
+    logger.info(f"Full request payload: {json.dumps(payload, indent=2)}")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -148,10 +151,12 @@ async def fetch_langdock_recommendation():
             )
             
             logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response headers: {dict(response.headers)}")
+            logger.info(f"Response text: {response.text}")
             
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Successfully fetched recommendation from Langdock: {data}")
+                logger.info("Successfully fetched recommendation from Langdock")
                 return data
             else:
                 logger.error(f"Langdock API error: {response.status_code} - {response.text}")
