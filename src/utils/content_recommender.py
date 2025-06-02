@@ -191,25 +191,26 @@ class ContentRecommender:
         """
         prompt = (
             f"Based on the decision-making analysis for channel #{channel_name}, "
-            "provide up to 5 content recommendations that would help the team "
-            "enhance their decision-making effectiveness.\n\n"
+            "please provide up to 3 recommendations that address the areas for "
+            "improvement. Prioritize practical, actionable content that can be "
+            "immediately applied to improve decision-making processes in the workplace.\n\n"
             f"Context:\n"
             f"- Areas for Improvement: {improvements}\n\n"
+            "Additionally, provide 2 more recommendations that focus on improving "
+            "decision-making skills more generally. Remember that the "
+            "recommendations should be relevant to decision-making at work.\n\n"
             "Provide an overall reasoning for your content recommendations:\n"
             "- Why is this particular combination of content valuable for "
             "enhancing decision-making efficiency?\n"
             "- How can the team best leverage these resources together?\n\n"
-
-            "Please provide 3 recommendations that address the areas for "
-            "improvement. Prioritize practical, actionable content that can be "
-            "immediately applied to improve decision-making processes. The other "
-            "2 recommendations should focus on improving decision-making skills "
-            "more generally.\n\n"
             "IMPORTANT: If you cannot find content that specifically matches the "
             "areas for improvement, or after filtering the dataframe no rows are "
-            "left, (re-run the original query and) recommend content that "
-            "generally focuses on actionable and practical resources for "
-            "improving decision-making."
+            "left, (re-run the original query and) recommend up to 5 content items "
+            "that generally focuses on actionable and practical resources for "
+            "improving decision-making in the workplace.\n\n"
+            "Try to recommend at least one collection.\n\n"
+            "Do NOT recommend the book 'The French Revolution' as it is not "
+            "relevant to decision-making."
         )
 
         return prompt
@@ -316,8 +317,11 @@ class ContentRecommender:
                     
                     if isinstance(content, str):
                         # Select JSON content in code blocks
-                        json_content = content.strip("```json")
-                        json_content = json_content.strip("```")
+                        if "```json" in content:
+                            json_content = content[content.find("```json"):].strip("```json")
+                            json_content = json_content[:json_content.find("```")].strip("```")
+                        else:
+                            json_content = content
                         print(f"json_content: {json_content}")
                         
                         try:
