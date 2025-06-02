@@ -316,8 +316,14 @@ Decision Status Analysis:
    - "initiated": Decision was clearly started but not yet in progress
    - "in_progress": Active discussion about the decision is ongoing
    - "closed": Decision was completed with clear resolution
-   - For closure, for example, look for messages with keywords like 
-     "agreed," "approved," "finalized," or "let's proceed"
+   - For closure, look for:
+     a) Explicit agreement in messages (e.g., "agreed," "approved," 
+        "finalized," "let's proceed")
+     b) Reaction-based agreement using emojis:
+        - "+1" or "thumbsup" reactions indicate agreement
+        - "ok_hand" reactions show approval
+        - Check mark style emojis (✓, ✅, etc.) signal acceptance
+     c) A combination of both explicit agreement and reactions
    - IMPORTANT: A decision can only be "closed" if there is clear 
      evidence it was previously "initiated"
    - If no clear initiation is found, the status cannot be "closed"
@@ -337,22 +343,26 @@ Then evaluate the decision-making process using these criteria:
    - Evaluate whether multiple team members contribute to the discussion.
    - Check if diverse perspectives are considered and quieter members are 
      engaged.
+   - Consider both message contributions and reaction-based participation.
    - It is acceptable if only a subset of the team is involved in the 
      discussion.
 
 3. **Efficiency in Reaching Decisions**:
    - Determine if decisions are made within a reasonable timeframe.
    - Look for focused discussions and minimal unnecessary delays.
+   - Consider both message-based and reaction-based decision closure.
 
 4. **Clarity of Outcomes**:
    - Check if the final decision is explicitly stated.
    - Look for clear next steps or action items.
+   - Consider both explicit agreement and reaction-based consensus.
 
 5. **Tone and Collaboration**:
    - Assess whether the tone of the discussion is constructive and 
      respectful.
    - Check for openness to different viewpoints and productive handling of 
      disagreements.
+   - Consider how reactions are used to show support or agreement.
    - It is acceptable if the tone is more informal, as long as it is not 
      disrespectful or hostile.
 
@@ -365,6 +375,7 @@ Then evaluate the decision-making process using these criteria:
 7. **Accountability and Follow-Up**:
    - Evaluate whether ownership of tasks is clearly assigned.
    - Look for follow-up messages to track progress on decisions.
+   - Consider how reactions are used to acknowledge assignments.
    - It is acceptable if it's obvious that the decision initiator is 
      responsible for the execution of the decision.
 """
@@ -484,13 +495,13 @@ Provide your analysis in this JSON format, and return ONLY the JSON object:
     def _format_messages_for_analysis(
         self, messages: List[Dict[str, Any]]
     ) -> str:
-        """Format messages for analysis with user and timestamp information.
+        """Format messages for analysis with user, timestamp, and reactions.
         
         Args:
             messages (List[Dict[str, Any]]): List of messages
             
         Returns:
-            str: Formatted message history with user and timestamp
+            str: Formatted message history with user, timestamp, and reactions
         """
         formatted_messages = []
         for msg in messages:
@@ -504,10 +515,20 @@ Provide your analysis in this JSON format, and return ONLY the JSON object:
                 .replace('\n', ' ')
             )
             
-            # Format message with user and timestamp
+            # Format reactions if any
+            reactions_text = ""
+            if msg.get('reactions'):
+                reactions = [
+                    f"{name}: {count}" 
+                    for name, count in msg['reactions'].items()
+                ]
+                if reactions:
+                    reactions_text = f" [Reactions: {', '.join(reactions)}]"
+            
+            # Format message with user, timestamp, and reactions
             formatted_msg = (
                 f"User {msg['user_id']} ({timestamp}): "
-                f"{message_text}"
+                f"{message_text}{reactions_text}"
             )
             formatted_messages.append(formatted_msg)
         
