@@ -325,7 +325,7 @@ Decision Status Analysis:
 3. If no decision was initiated:
    - Mark as "no_decision"
    - Do not consider any other decision states
-   - Focus on the general discussion effectiveness instead
+   - Focus on the general communication effectiveness instead
 
 Then evaluate the decision-making process using these criteria:
 
@@ -570,7 +570,6 @@ Provide your analysis in this JSON format, and return ONLY the JSON object:
             ].strip("```json")
             # Find the end of the JSON code block
             content = content[
-                :content.find("```"):
-            ].strip("```")
+                :content.find("```")].strip("```")
         
         return content
