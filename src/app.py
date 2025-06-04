@@ -133,6 +133,16 @@ def handle_content_recommendations(ack, body, client, logger):
     except Exception as e:
         logger.error(f"Error handling content recommendations action: {e}")
 
+@app.event("message")
+def handle_message_events(event, logger):
+    """Handle message events to prevent unhandled request errors."""
+    # Ignore bot messages and message changes to prevent loops
+    if event.get("subtype") in ["bot_message", "message_changed", "message_deleted"]:
+        return
+    
+    logger.info(f"Received message event: {event}")
+    # Add any message handling logic here if needed
+
 def run_scheduler():
     """Run the scheduler for periodic tasks."""
     logger.info("Starting periodic scheduler thread")

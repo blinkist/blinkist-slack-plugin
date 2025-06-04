@@ -117,7 +117,7 @@ async def fetch_langdock_recommendation():
         if excluded_news_topics:
             base_prompt += f"\nExcluded news topics (do not use): {excluded_news_topics}"
         if excluded_books:
-            base_prompt += f"\nExcluded book content IDs (do not recommend): {excluded_books}"
+            base_prompt += f"\nexcluded_content_ids: {excluded_books}"
     
     payload = {
         "assistantId": ASSISTANT_ID,
@@ -128,9 +128,56 @@ async def fetch_langdock_recommendation():
             }
         ],
         "output": {
-            "type": "enum",
-            "enum": ["<string>"],
-            "schema": {}
+            "type": "object",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "news_topic": {
+                        "type": "string",
+                        "description": "Specific, descriptive topic of the actual very recent news story you found in Step 1 (must be from last 1-3 days)"
+                    },
+                    "message_title": {
+                        "type": "string",
+                        "description": "Brief, engaging headline that clearly connects the specific recent news to the specific book recommendation"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "2-3 paragraph explanation covering: (1) What's happening in this specific recent news and why it matters right now, (2) How this specific Blinkist content directly relates to and helps understand this exact event, (3) What specific insights or skills the user will gain that apply to this news situation. **CRITICAL: Only mention the book title and author that exactly match the content_title and content_author fields below**"
+                    },
+                    "content_id": {
+                        "type": "string",
+                        "description": "Exact CONTENT_ID from the SAME SINGLE ROW in Step 0 results"
+                    },
+                    "content_slug": {
+                        "type": "string",
+                        "description": "Exact SLUG from the SAME SINGLE ROW in Step 0 results"
+                    },
+                    "content_title": {
+                        "type": "string",
+                        "description": "Exact CONTENT_TITLE from the SAME SINGLE ROW in Step 0 results"
+                    },
+                    "content_author": {
+                        "type": "string",
+                        "description": "Exact CONTENT_AUTHOR from the SAME SINGLE ROW in Step 0 results"
+                    },
+                    "content_type": {
+                        "type": "string",
+                        "enum": ["book"],
+                        "description": "Content type, always 'book'"
+                    }
+                },
+                "required": [
+                    "news_topic",
+                    "message_title", 
+                    "message",
+                    "content_id",
+                    "content_slug",
+                    "content_title",
+                    "content_author",
+                    "content_type"
+                ],
+                "additionalProperties": False
+            }
         }
     }
 
