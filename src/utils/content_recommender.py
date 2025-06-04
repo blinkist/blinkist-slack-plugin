@@ -109,7 +109,7 @@ class ContentRecommender:
                 self.api_url,
                 json=payload,
                 headers=self.headers,
-                timeout=30
+                timeout=120
             )
             response.raise_for_status()
             
@@ -161,8 +161,7 @@ class ContentRecommender:
                 "POST",
                 self.api_url,
                 json=payload,
-                headers=self.headers,
-                timeout=10
+                headers=self.headers
             )
             
             # Check for successful response
@@ -202,16 +201,15 @@ class ContentRecommender:
             "Provide an overall reasoning for your content recommendations:\n"
             "- Why is this particular combination of content valuable for "
             "enhancing decision-making efficiency?\n"
-            "- How can the team best leverage these resources together?\n\n"
-            "IMPORTANT: If you cannot find content that specifically matches the "
-            "areas for improvement, or after filtering the dataframe no rows are "
-            "left, (re-run the original query and) recommend up to 5 content items "
-            "that generally focuses on actionable and practical resources for "
-            "improving decision-making in the workplace.\n\n"
-            "Try to recommend at least one collection.\n\n"
-            "Do NOT recommend the book 'The French Revolution' as it is not "
+            "- How can the team best leverage these resources together?\n"
+            "- Do not include information about the approach you used to find the content.\n\n"
+            "IMPORTANT:\n"
+            "- Use a semantic search approach to find matching content items, "
+            "DO NOT use simple keyword matching.\n"
+            "- Try to recommend at least one collection.\n"
+            "- DO NOT recommend the book 'The French Revolution' as it is not "
             "relevant to decision-making."
-        )
+        ) 
 
         return prompt
 
@@ -322,7 +320,6 @@ class ContentRecommender:
                             json_content = json_content[:json_content.find("```")].strip("```")
                         else:
                             json_content = content
-                        print(f"json_content: {json_content}")
                         
                         try:
                             # Extract the JSON content
@@ -344,7 +341,6 @@ class ContentRecommender:
                                 )
                             ):
                                 content_data = parsed_content
-                                print(f"content_data: {content_data}")
                                 break
                         except json.JSONDecodeError:
                             continue
