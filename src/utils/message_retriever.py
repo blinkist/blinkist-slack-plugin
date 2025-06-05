@@ -1,8 +1,10 @@
 """Utilities for retrieving and processing Slack messages."""
 import logging
+import os
 from typing import List, Dict, Any
 import pandas as pd
 from datetime import datetime, timedelta
+from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +17,15 @@ class MessageRetriever:
 
         Args:
             app: The Slack app instance
-            channel_tracker: Instance of ChannelTracker to get installed channels
+            channel_tracker: Instance of ChannelTracker to get installed 
+                channels
         """
         self.app = app
         self.channel_tracker = channel_tracker
+        
+        # Add rate limit retry handler to the app's client
+        rate_limit_handler = RateLimitErrorRetryHandler(max_retry_count=10)
+        self.app.client.retry_handlers.append(rate_limit_handler)
 
     def get_channel_messages(
         self, 
@@ -255,7 +262,6 @@ class MessageRetriever:
                 if messages:
                     last_message = messages[-1]
                     latest = last_message["ts"]
-
                 # Get cursor for next page if available
                 cursor = response.get("response_metadata", {}).get("next_cursor")
                 if not cursor:
@@ -274,20 +280,19 @@ class MessageRetriever:
             return [] 
 
     def _get_thread_replies(
-        self, 
-        channel_id: str, 
+        self,
+        channel_id: str,
         thread_ts: str,
         channel_name: str
     ) -> List[Dict[str, Any]]:
-        """Process thread replies for a message.
-
+        """Get replies for a thread.
+        
         Args:
-            channel_id: The ID of the channel
-            thread_ts: The timestamp of the thread parent message
-            channel_name: The name of the channel
-
+            channel_id (str): Channel ID
+            thread_ts (str): Thread timestamp
+            
         Returns:
-            List[Dict[str, Any]]: List of thread reply messages
+            List[Dict[str, Any]]: List of thread replies
         """
         thread_messages = []
         cursor = None
@@ -313,7 +318,7 @@ class MessageRetriever:
 
                 # Fetch thread replies
                 thread_replies = self.app.client.conversations_replies(**params)
-                
+
                 if not thread_replies["ok"]:
                     logger.error(
                         f"Failed to fetch thread replies: {thread_replies['error']}"
