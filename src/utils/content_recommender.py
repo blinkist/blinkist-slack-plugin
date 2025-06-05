@@ -86,19 +86,30 @@ class ContentRecommender:
                     }
                 ],
                 "output": {
-                    "type": "enum",
+                    "type": "object",
                     "enum": ["<string>"],
-                    "schema": {}
+                    "schema": {
+                        "recommendations": [
+                            {
+                                "content_id": "unique identifier",
+                                "content_type": "book/collection/guide",
+                                "title": "content title",
+                                "slug": "url-friendly-identifier",
+                                "description": "short content description"
+                            }
+                        ],
+                        "reasoning": "Brief rationale for content recommendations"
+                    }
                 }
             }
-            
+
             # Send request to API
             response = requests.request(
                 "POST",
                 self.api_url,
                 json=payload,
                 headers=self.headers,
-                timeout=30
+                timeout=120
             )
             response.raise_for_status()
             
@@ -144,14 +155,13 @@ class ContentRecommender:
                     "schema": {}
                 }
             }
-            
+
             # Send test request
             response = requests.request(
                 "POST",
                 self.api_url,
                 json=payload,
-                headers=self.headers,
-                timeout=10
+                headers=self.headers
             )
             
             # Check for successful response
@@ -180,123 +190,105 @@ class ContentRecommender:
         """
         prompt = (
             f"Based on the decision-making analysis for channel #{channel_name}, "
-            "provide up to 5 content recommendations that would help the team "
-            "enhance their decision-making effectiveness.\n\n"
+            "please provide up to 3 recommendations that address the areas for "
+            "improvement. Prioritize practical, actionable content that can be "
+            "immediately applied to improve decision-making processes in the workplace.\n\n"
             f"Context:\n"
             f"- Areas for Improvement: {improvements}\n\n"
+            "Additionally, provide 2 more recommendations that focus on improving "
+            "decision-making skills more generally. Remember that the "
+            "recommendations should be relevant to decision-making at work.\n\n"
             "Provide an overall reasoning for your content recommendations:\n"
             "- Why is this particular combination of content valuable for "
             "enhancing decision-making efficiency?\n"
-            "- How can the team best leverage these resources together?\n\n"
-            "OUTPUT FORMAT:\n"
-            "For your recommendations, please respond with ONLY this JSON format:\n"
-            "{\n"
-            '    "recommendations": [\n'
-            "        {\n"
-            '            "content_id": "unique identifier",\n'
-            '            "content_type": "book/collection",\n'
-            '            "title": "content title",\n'
-            '            "slug": "url-friendly-identifier"\n'
-            "        },\n"
-            "        ...\n"
-            "    ],\n"
-            '    "reasoning": "Brief rationale for content recommendations"\n'
-            "}\n"
-            "Any other response that you give should NOT be in JSON format.\n\n"
-            "Focus especially on content that addresses the areas for "
-            "improvement while building upon existing strengths. Prioritize "
-            "practical, actionable content that can be immediately applied to "
-            "improve decision-making processes.\n\n"
-            "IMPORTANT: If you cannot find content that specifically matches the "
-            "areas for improvement, recommend content that generally focuses"
-            "on actionable and practical resources for improving decision-making."
-        )
+            "- How can the team best leverage these resources together?\n"
+            "- Do not include information about the approach you used to find the content.\n\n"
+            "IMPORTANT:\n"
+            "- Use a semantic search approach to find matching content items, "
+            "DO NOT use simple keyword matching.\n"
+            "- Try to recommend at least one collection.\n"
+            "- DO NOT recommend the book 'The French Revolution' as it is not "
+            "relevant to decision-making."
+        ) 
 
         return prompt
 
     def _format_blinkist_content(
         self,
-        content: Dict[str, Any],
-        index: int
+        content: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Format a single Blinkist content recommendation into Slack blocks.
-        
+        """Format Blinkist content into Slack blocks with image and button.
+
         Args:
-            content (Dict[str, Any]): Content recommendation data
-            index (int): Index of the recommendation
-            
+            content: Dictionary containing content details
+
         Returns:
-            List[Dict[str, Any]]: Formatted Slack blocks for the content
+            List of Slack blocks
         """
         try:
-            # Extract content details
-            content_title = content.get("title", f"Recommendation {index+1}")
-            
-            # Log the content details
-            logger.info(
-                f"Processing recommendation {index+1}: {content_title}"
-            )
-            logger.info(
-                f"Content type: {content.get('content_type', '')}, "
-                f"Content ID: {content.get('content_id', '')}"
-            )
-            
             # Get URLs using helper methods
             url = self._get_url(content)
             image_url = self._get_image_url(content)
             
-            logger.info(f"URL: {url}")
-            logger.info(f"Image URL: {image_url}")
+            # Get content details
+            title = content.get("title", "Untitled")
+            description = content.get(
+                "description",
+                "No description available"
+            )
+            
+            # Log content details for debugging
+            logger.info(
+                "Formatting content: %s",
+                {
+                    "title": title,
+                    "url": url,
+                    "image_url": image_url,
+                    "description": description
+                }
+            )
             
             # Create blocks for the content
-            blocks = []
-            
-            # Create section with image
-            section = {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": " "  # Empty text as we're using accessories
-                },
-                "accessory": {
-                    "type": "image",
-                    "image_url": image_url,
-                    "alt_text": content_title
-                }
-            }
-            blocks.append(section)
-            
-            # Add action button
-            blocks.append({
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": content_title,
-                            "emoji": True
-                        },
-                        "url": url,
-                        "action_id": f"view_content_{index}"
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"{description}"
+                    },
+                    "accessory": {
+                        "type": "image",
+                        "image_url": image_url,
+                        "alt_text": title
                     }
-                ]
-            })
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Read on Blinkist",
+                                "emoji": True
+                            },
+                            "url": url,
+                            "action_id": "read_on_blinkist"
+                        }
+                    ]
+                }
+            ]
             
             return blocks
             
         except Exception as e:
-            logger.error(f"Error formatting content {index+1}: {str(e)}")
-            # Return a simple text block as fallback
-            return [{
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{content_title}*\n<{url}|View Content>"
-                }
-            }]
+            logger.error("Error formatting content: %s", str(e))
+            return []
 
-    def _process_api_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_api_response(
+        self,
+        response: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Process the API response into Slack message blocks.
         
         Args:
@@ -316,21 +308,35 @@ class ContentRecommender:
                 if message.get("role") == "assistant":
                     content = message.get("content", "")
                     print(f"content: {content}")
+                    
+                    # Skip tool-call messages
+                    if '"type": "tool-call"' in content:
+                        continue
+                    
                     if isinstance(content, str):
+                        # Select JSON content in code blocks
+                        if "```json" in content:
+                            json_content = content[content.find("```json"):].strip("```json")
+                            json_content = json_content[:json_content.find("```")].strip("```")
+                        else:
+                            json_content = content
+                        
                         try:
-                            parsed_content = json.loads(content)
+                            # Extract the JSON content
+                            parsed_content = json.loads(json_content)
+                            
+                            # Validate the parsed content structure
                             if (
-                                isinstance(parsed_content, dict) and
                                 "recommendations" in parsed_content and
                                 "reasoning" in parsed_content and
-                                isinstance(parsed_content["recommendations"], list) and
                                 len(parsed_content["recommendations"]) > 0 and
                                 all(
                                     isinstance(rec, dict) and
                                     "content_id" in rec and
                                     "content_type" in rec and
                                     "title" in rec and
-                                    "slug" in rec
+                                    "slug" in rec and
+                                    "description" in rec
                                     for rec in parsed_content["recommendations"]
                                 )
                             ):
@@ -340,7 +346,9 @@ class ContentRecommender:
                             continue
             
             if not content_data:
-                raise ValueError("No valid recommendations found in the response")
+                raise ValueError(
+                    "No valid recommendations found in the response"
+                )
             
             # Start with header and reasoning
             blocks = [
@@ -369,7 +377,7 @@ class ContentRecommender:
             
             # Add each recommendation
             for i, rec in enumerate(content_data["recommendations"]):
-                blocks.extend(self._format_blinkist_content(rec, i))
+                blocks.extend(self._format_blinkist_content(rec))
                 if i < len(content_data["recommendations"]) - 1:
                     blocks.append({"type": "divider"})
             
@@ -383,7 +391,10 @@ class ContentRecommender:
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "Sorry, I couldn't process the recommendations at this time."
+                            "text": (
+                                "Sorry, I couldn't process the recommendations "
+                                "at this time."
+                            )
                         }
                     }
                 ]
