@@ -75,7 +75,7 @@ class ContentRecommender:
                 raise ValueError(
                     "Either provide a direct prompt or channel name and improvements"
                 )
-            
+
             # Prepare API payload
             payload = {
                 "assistantId": self.assistant_id,
@@ -108,11 +108,9 @@ class ContentRecommender:
                 "POST",
                 self.api_url,
                 json=payload,
-                headers=self.headers,
-                timeout=120
+                headers=self.headers
             )
             response.raise_for_status()
-            
             # Process and return recommendations
             return self._process_api_response(response.json())
             
@@ -204,8 +202,7 @@ class ContentRecommender:
             "- How can the team best leverage these resources together?\n"
             "- Do not include information about the approach you used to find the content.\n\n"
             "IMPORTANT:\n"
-            "- Use a semantic search approach to find matching content items, "
-            "DO NOT use simple keyword matching.\n"
+            "- Use a semantic search approach to find matching content items.\n"
             "- Try to recommend at least one collection.\n"
             "- DO NOT recommend the book 'The French Revolution' as it is not "
             "relevant to decision-making."
@@ -307,8 +304,6 @@ class ContentRecommender:
             for message in reversed(response["result"]):
                 if message.get("role") == "assistant":
                     content = message.get("content", "")
-                    print(f"content: {content}")
-                    
                     # Skip tool-call messages
                     if '"type": "tool-call"' in content:
                         continue
@@ -324,7 +319,6 @@ class ContentRecommender:
                         try:
                             # Extract the JSON content
                             parsed_content = json.loads(json_content)
-                            
                             # Validate the parsed content structure
                             if (
                                 "recommendations" in parsed_content and
